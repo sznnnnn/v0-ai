@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from "react-leaflet";
+import { useEffect, useMemo, useState } from "react";
+import { MapContainer, TileLayer, CircleMarker, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { cn } from "@/lib/utils";
@@ -49,66 +49,84 @@ export function WorkspaceApplicationsMapImpl({
   const fallbackCenter: [number, number] = [20, 10];
   const center: [number, number] =
     pins.length === 1 ? [pins[0].lat, pins[0].lng] : fallbackCenter;
+  const [activeSchoolId, setActiveSchoolId] = useState<string | null>(pins[0]?.schoolId ?? null);
+
+  useEffect(() => {
+    if (pins.length === 0) {
+      setActiveSchoolId(null);
+      return;
+    }
+    if (activeSchoolId && pins.some((p) => p.schoolId === activeSchoolId)) return;
+    setActiveSchoolId(pins[0].schoolId);
+  }, [pins, activeSchoolId]);
+
+  const activePin = useMemo(
+    () => pins.find((pin) => pin.schoolId === activeSchoolId) ?? null,
+    [pins, activeSchoolId]
+  );
 
   return (
-    <div
-      className={cn(
-        "aspect-square w-full max-w-[200px] overflow-hidden rounded-xl border border-border bg-card shadow-sm",
-        className
-      )}
-    >
-      <MapContainer
-        center={center}
-        zoom={pins.length === 1 ? 4 : 2}
-        className="isolate z-0 h-full w-full [&_.leaflet-control-attribution]:max-w-[min(100%,160px)] [&_.leaflet-control-attribution]:whitespace-normal [&_.leaflet-control-attribution]:text-[9px] [&_.leaflet-control-attribution]:leading-snug"
-        scrollWheelZoom
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        <FitBounds pins={pins} />
-        {pins.map((pin) => (
-          <CircleMarker
-            key={pin.schoolId}
-            center={[pin.lat, pin.lng]}
-            radius={Math.min(8 + pin.programCount * 2, 18)}
-            pathOptions={{
-              color: "#0f766e",
-              fillColor: "#14b8a6",
-              fillOpacity: 0.78,
-              weight: 2,
-            }}
-          >
-            <Popup>
-              <div className="min-w-[160px] space-y-1">
-                <div className="flex items-start gap-2">
-                  <SchoolLogoMark
-                    school={{ name: pin.name, nameEn: pin.nameEn, logo: pin.logo }}
-                    size="row"
-                    rounded="md"
-                  />
-                  <p className="text-sm font-semibold leading-tight text-neutral-900">{pin.name}</p>
-                </div>
-                <p className="text-xs text-neutral-600">{pin.nameEn}</p>
-                <p className="text-xs text-neutral-600">
-                  {pin.city} · {pin.country}
-                </p>
-                <p className="text-xs tabular-nums text-neutral-800">{pin.programCount} 个项目</p>
-                {onSelectSchool ? (
-                  <button
-                    type="button"
-                    className="mt-2 w-full rounded-md bg-teal-700 px-2 py-1.5 text-xs font-medium text-white hover:bg-teal-800"
-                    onClick={() => onSelectSchool(pin.schoolId)}
-                  >
-                    查看该校
-                  </button>
-                ) : null}
-              </div>
-            </Popup>
-          </CircleMarker>
-        ))}
-      </MapContainer>
+    <div className={cn("w-full max-w-[340px] space-y-2", className)}>
+      <div className="aspect-square w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        <MapContainer
+          center={center}
+          zoom={pins.length === 1 ? 4 : 2}
+          className="isolate z-0 h-full w-full [&_.leaflet-control-attribution]:max-w-[min(100%,160px)] [&_.leaflet-control-attribution]:whitespace-normal [&_.leaflet-control-attribution]:text-[9px] [&_.leaflet-control-attribution]:leading-snug"
+          scrollWheelZoom
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+          <FitBounds pins={pins} />
+          {pins.map((pin) => (
+            <CircleMarker
+              key={pin.schoolId}
+              center={[pin.lat, pin.lng]}
+              radius={Math.min(8 + pin.programCount * 2, 18)}
+              pathOptions={{
+                color: activeSchoolId === pin.schoolId ? "#0f766e" : "#0ea5a4",
+                fillColor: activeSchoolId === pin.schoolId ? "#14b8a6" : "#5eead4",
+                fillOpacity: 0.82,
+                weight: activeSchoolId === pin.schoolId ? 2.5 : 2,
+              }}
+              eventHandlers={{
+                click: () => setActiveSchoolId(pin.schoolId),
+              }}
+            />
+          ))}
+        </MapContainer>
+      </div>
+      {activePin ? (
+        <div className="rounded-lg border border-border/70 bg-background/90 px-2.5 py-2 text-left">
+          <div className="flex items-start gap-2">
+            <SchoolLogoMark
+              school={{ name: activePin.name, nameEn: activePin.nameEn, logo: activePin.logo }}
+              size="row"
+              rounded="md"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-semibold leading-tight text-foreground">{activePin.name}</p>
+              <p className="truncate text-[11px] text-muted-foreground">{activePin.nameEn}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                {activePin.city} · {activePin.country}
+              </p>
+            </div>
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <p className="text-[11px] tabular-nums text-foreground/85">{activePin.programCount} 个项目</p>
+            {onSelectSchool ? (
+              <button
+                type="button"
+                className="rounded-md bg-teal-700 px-2 py-1 text-[11px] font-medium text-white hover:bg-teal-800"
+                onClick={() => onSelectSchool(activePin.schoolId)}
+              >
+                查看该校
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

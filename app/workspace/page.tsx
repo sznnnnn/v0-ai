@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -341,10 +341,6 @@ export default function WorkspacePage() {
     };
   }, [displayPrograms, applications]);
 
-  const dashboardDraftPrograms = useMemo(() => {
-    const ids = new Set(displayPrograms.map(({ program }) => program.id));
-    return draftSummaries.filter((d) => ids.has(d.programId)).length;
-  }, [displayPrograms, draftSummaries]);
   const backgroundMaterialCount = questionnaireData.files.length;
   const shouldPromptMoreBackgroundMaterials =
     questionnaireLoaded && backgroundMaterialCount < 5;
@@ -630,113 +626,90 @@ export default function WorkspacePage() {
                   ) : null}
 
                   {addedPrograms.length > 0 ? (
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-                      <Card className="gap-0 border-border/80 bg-muted/10 py-0 shadow-none">
-                        <CardContent className="flex flex-col gap-1 px-4 py-4">
-                          <span className="text-[11px] font-medium tracking-wide text-muted-foreground">
-                            列表内项目
-                          </span>
-                          <span className="text-2xl font-semibold tabular-nums tracking-tight text-foreground">
-                            {dashboardStats.programs}
-                          </span>
-                        </CardContent>
-                      </Card>
-                      <Card className="gap-0 border-border/80 bg-muted/10 py-0 shadow-none">
-                        <CardContent className="flex flex-col gap-1 px-4 py-4">
+                    <section className="space-y-3" aria-label="概览指标">
+                      <div className="flex items-center gap-2">
+                        <LayoutGrid className="h-4 w-4 text-muted-foreground" aria-hidden />
+                        <h2 className="text-sm font-medium text-foreground">概览指标</h2>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+                        <div className="rounded-lg border border-border/70 bg-muted/[0.16] px-4 py-3.5">
                           <span className="text-[11px] font-medium tracking-wide text-muted-foreground">院校</span>
-                          <span className="text-2xl font-semibold tabular-nums tracking-tight text-foreground">
+                          <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
                             {dashboardStats.schools}
-                          </span>
-                        </CardContent>
-                      </Card>
-                      <Card className="gap-0 border-border/80 bg-muted/10 py-0 shadow-none">
-                        <CardContent className="flex flex-col gap-1 px-4 py-4">
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-border/70 bg-muted/[0.16] px-4 py-3.5">
                           <span className="text-[11px] font-medium tracking-wide text-muted-foreground">待申请</span>
-                          <span className="text-2xl font-semibold tabular-nums tracking-tight text-foreground">
+                          <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
                             {dashboardStats.todo}
-                          </span>
-                        </CardContent>
-                      </Card>
-                      <Card className="gap-0 border-border/80 bg-muted/10 py-0 shadow-none">
-                        <CardContent className="flex flex-col gap-1 px-4 py-4">
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-border/70 bg-muted/[0.16] px-4 py-3.5">
                           <span className="text-[11px] font-medium tracking-wide text-muted-foreground">
                             准备 / 已递交
                           </span>
-                          <span className="text-2xl font-semibold tabular-nums tracking-tight text-foreground">
+                          <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
                             {dashboardStats.active}
-                          </span>
-                        </CardContent>
-                      </Card>
-                      <Card className="gap-0 border-border/80 bg-muted/10 py-0 shadow-none">
-                        <CardContent className="flex flex-col gap-1 px-4 py-4">
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-border/70 bg-muted/[0.16] px-4 py-3.5">
                           <span className="text-[11px] font-medium tracking-wide text-muted-foreground">
                             已有结果
                           </span>
-                          <span className="text-2xl font-semibold tabular-nums tracking-tight text-foreground">
+                          <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
                             {dashboardStats.outcome}
-                          </span>
-                        </CardContent>
-                      </Card>
-                      <Card className="gap-0 border-border/80 bg-muted/10 py-0 shadow-none">
-                        <CardContent className="flex flex-col gap-1 px-4 py-4">
-                          <span className="text-[11px] font-medium tracking-wide text-muted-foreground">
-                            有文书草稿
-                          </span>
-                          <span className="text-2xl font-semibold tabular-nums tracking-tight text-foreground">
-                            {dashboardDraftPrograms}
-                          </span>
-                        </CardContent>
-                      </Card>
-                    </div>
+                          </p>
+                        </div>
+                      </div>
+                    </section>
                   ) : null}
 
-                  <div className="grid gap-4 lg:grid-cols-5 lg:items-stretch">
-                    <Card
-                      className={cn(
-                        "gap-0 border-border/80 py-0 shadow-sm",
-                        workspaceMapPins.length > 0 ? "lg:col-span-3" : "lg:col-span-5"
-                      )}
+                  <div className="grid gap-6 border-t border-border/60 pt-5 lg:grid-cols-12 lg:items-start">
+                    <section
+                      className={cn("space-y-3.5", workspaceMapPins.length > 0 ? "lg:col-span-5" : "lg:col-span-12")}
                     >
-                      <CardHeader className="gap-1 border-b border-border/60 px-5 py-4">
-                        <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                          <LayoutDashboard className="h-4 w-4 text-muted-foreground" aria-hidden />
-                          快捷操作
-                        </CardTitle>
-                        <CardDescription>选校、背景与项目入口</CardDescription>
-                      </CardHeader>
-                      <CardContent className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:flex-wrap sm:items-center">
-                        <Button variant="outline" size="sm" className="h-9 gap-2 font-normal" asChild>
+                      <div className="flex items-center gap-2 border-b border-border/50 pb-2.5">
+                        <LayoutDashboard className="h-4 w-4 text-muted-foreground" aria-hidden />
+                        <h2 className="text-sm font-medium text-foreground">快捷操作</h2>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <Button
+                          variant="outline"
+                          className="h-16 justify-start gap-3 rounded-lg border-border/70 bg-background/70 px-4 text-sm font-medium shadow-none transition-colors hover:bg-muted/35"
+                          asChild
+                        >
                           <Link href="/match">
-                            <ListChecks className="h-4 w-4 opacity-70" aria-hidden />
+                            <ListChecks className="h-4.5 w-4.5 opacity-80" aria-hidden />
                             选校清单
                           </Link>
                         </Button>
-                        <Button variant="outline" size="sm" className="h-9 gap-2 font-normal" asChild>
+                        <Button
+                          variant="outline"
+                          className="h-16 justify-start gap-3 rounded-lg border-border/70 bg-background/70 px-4 text-sm font-medium shadow-none transition-colors hover:bg-muted/35"
+                          asChild
+                        >
                           <Link href="/questionnaire">
-                            <FileText className="h-4 w-4 opacity-70" aria-hidden />
+                            <FileText className="h-4.5 w-4.5 opacity-80" aria-hidden />
                             我的背景
                           </Link>
                         </Button>
-                      </CardContent>
-                    </Card>
+                      </div>
+                    </section>
 
                     {workspaceMapPins.length > 0 ? (
-                      <Card className="gap-0 border-border/80 py-0 shadow-sm lg:col-span-2">
-                        <CardHeader className="gap-1 border-b border-border/60 px-5 py-4">
-                          <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                            <Globe2 className="h-4 w-4 text-muted-foreground" aria-hidden />
-                            地图分布
-                          </CardTitle>
-                          <CardDescription>标记点可弹出详情并进入学校</CardDescription>
-                        </CardHeader>
-                        <CardContent className="flex justify-center px-5 py-5">
+                      <section className="space-y-3.5 lg:col-span-7">
+                        <div className="flex items-center gap-2 border-b border-border/50 pb-2.5">
+                          <Globe2 className="h-4 w-4 text-muted-foreground" aria-hidden />
+                          <h2 className="text-sm font-medium text-foreground">地图分布</h2>
+                        </div>
+                        <div className="rounded-lg border border-border/60 bg-muted/[0.08] px-3 py-3">
                           <WorkspaceApplicationsMap
                             pins={workspaceMapPins}
                             onSelectSchool={(id) => selectSchool(id)}
-                            className="shadow-none"
+                            className="max-w-none shadow-none"
                           />
-                        </CardContent>
-                      </Card>
+                        </div>
+                      </section>
                     ) : null}
                   </div>
                 </section>

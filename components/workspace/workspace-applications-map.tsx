@@ -13,7 +13,7 @@ const WorkspaceApplicationsMapImpl = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex aspect-square w-full max-w-[200px] items-center justify-center rounded-xl border border-border bg-muted/25 text-xs text-muted-foreground">
+      <div className="flex aspect-square w-full max-w-[200px] items-center justify-center rounded-lg border border-border/60 bg-muted/[0.12] text-xs text-muted-foreground">
         地图加载中…
       </div>
     ),
