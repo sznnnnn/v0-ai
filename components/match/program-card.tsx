@@ -106,6 +106,17 @@ export function ProgramCard({
               <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{program.department}</p>
             </div>
             <div className="flex shrink-0 flex-wrap items-start justify-end gap-1.5">
+              {showSchoolInHeader && (
+                <SchoolLogoMark
+                  school={school}
+                  size="row"
+                  rounded="md"
+                  title={school.nameEn}
+                  frameClassName={cn(
+                    isAdded && "border-foreground/25 ring-1 ring-foreground/10"
+                  )}
+                />
+              )}
               {showSelectionAction &&
                 (isAdded ? (
                   <Tooltip>
@@ -149,17 +160,6 @@ export function ProgramCard({
                     <TooltipContent side="top">添加到工作台</TooltipContent>
                   </Tooltip>
                 ))}
-              {showSchoolInHeader && (
-                <SchoolLogoMark
-                  school={school}
-                  size="row"
-                  rounded="md"
-                  title={school.nameEn}
-                  frameClassName={cn(
-                    isAdded && "border-foreground/25 ring-1 ring-foreground/10"
-                  )}
-                />
-              )}
             </div>
           </div>
 

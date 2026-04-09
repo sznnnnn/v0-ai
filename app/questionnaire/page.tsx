@@ -8,6 +8,7 @@ import { ArrowLeft, ArrowRight, Check, Paperclip, X } from "lucide-react";
 import { GuestBanner } from "@/components/questionnaire/guest-banner";
 import { FileUpload } from "@/components/questionnaire/file-upload";
 import { PersonalInfoForm } from "@/components/questionnaire/steps/personal-info";
+import { TargetPreferencesForm } from "@/components/questionnaire/steps/target-preferences";
 import { EducationForm } from "@/components/questionnaire/steps/education";
 import { StandardizedTestsForm } from "@/components/questionnaire/steps/standardized-tests";
 import { WorkExperienceForm } from "@/components/questionnaire/steps/work-experience";
@@ -31,21 +32,24 @@ export default function QuestionnairePage() {
   const { data, isLoaded, saveData, setCurrentStep, getCompletionStatus } = useQuestionnaire();
   const [showUploadPanel, setShowUploadPanel] = useState(false);
   const [navigationHint, setNavigationHint] = useState("");
+  const [introName, setIntroName] = useState("");
+  const [hasEnteredQuestionnaire, setHasEnteredQuestionnaire] = useState(false);
   const currentStep = data.currentStep;
-  const totalSteps = 8;
+  const totalSteps = 9;
   const completionStatus = useMemo(() => getCompletionStatus(), [getCompletionStatus]);
   const progress = Math.round((completionStatus.completedSteps.length / totalSteps) * 100);
 
   const steps = useMemo(
     () => [
       { number: 1, title: "个人信息", required: true },
-      { number: 2, title: "教育背景", required: true },
-      { number: 3, title: "标化成绩", required: false },
-      { number: 4, title: "工作经历", required: false },
-      { number: 5, title: "项目经历", required: false },
-      { number: 6, title: "荣誉奖项", required: false },
-      { number: 7, title: "技能", required: false },
-      { number: 8, title: "拓展问题", required: false },
+      { number: 2, title: "意向偏好", required: false },
+      { number: 3, title: "教育背景", required: true },
+      { number: 4, title: "标化成绩", required: false },
+      { number: 5, title: "工作经历", required: false },
+      { number: 6, title: "项目经历", required: false },
+      { number: 7, title: "荣誉奖项", required: false },
+      { number: 8, title: "技能", required: false },
+      { number: 9, title: "拓展问题", required: false },
     ],
     []
   );
@@ -123,6 +127,29 @@ export default function QuestionnairePage() {
     });
   }, [saveData]);
 
+  const handleUploadAutofill = useCallback(() => {
+    saveData({
+      ...getSampleQuestionnaireDemoPayload(),
+      completedSteps: [1, 2, 3, 4, 5, 6, 7, 8],
+    });
+    setNavigationHint("已写入预设答案（示例 B）");
+    setShowUploadPanel(false);
+  }, [saveData]);
+
+  const handleEnterQuestionnaire = useCallback(() => {
+    const trimmedName = introName.trim();
+    if (!trimmedName) {
+      return;
+    }
+    saveData({
+      personalInfo: {
+        ...data.personalInfo,
+        fullName: trimmedName,
+      },
+    });
+    setHasEnteredQuestionnaire(true);
+  }, [data.personalInfo, introName, saveData]);
+
   const stepForm = useMemo(() => {
     switch (currentStep) {
       case 1:
@@ -133,23 +160,30 @@ export default function QuestionnairePage() {
           />
         );
       case 2:
-        return <EducationForm data={data.education} onChange={(education) => updateData("education", education)} />;
+        return (
+          <TargetPreferencesForm
+            data={data.personalInfo}
+            onChange={(personalInfo) => updateData("personalInfo", personalInfo)}
+          />
+        );
       case 3:
-        return <StandardizedTestsForm data={data.tests} onChange={(tests) => updateData("tests", tests)} />;
+        return <EducationForm data={data.education} onChange={(education) => updateData("education", education)} />;
       case 4:
+        return <StandardizedTestsForm data={data.tests} onChange={(tests) => updateData("tests", tests)} />;
+      case 5:
         return (
           <WorkExperienceForm
             data={data.workExperience}
             onChange={(workExperience) => updateData("workExperience", workExperience)}
           />
         );
-      case 5:
-        return <ProjectExperienceForm data={data.projects} onChange={(projects) => updateData("projects", projects)} />;
       case 6:
-        return <HonorsForm data={data.honors} onChange={(honors) => updateData("honors", honors)} />;
+        return <ProjectExperienceForm data={data.projects} onChange={(projects) => updateData("projects", projects)} />;
       case 7:
-        return <SkillsForm data={data.skills} onChange={(skills) => updateData("skills", skills)} />;
+        return <HonorsForm data={data.honors} onChange={(honors) => updateData("honors", honors)} />;
       case 8:
+        return <SkillsForm data={data.skills} onChange={(skills) => updateData("skills", skills)} />;
+      case 9:
         return (
           <ExtensionQuestionsForm
             data={data.personalInfo}
@@ -169,6 +203,43 @@ export default function QuestionnairePage() {
     );
   }
 
+  if (!hasEnteredQuestionnaire) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-background via-background to-muted/20 px-6">
+        <div className="w-full max-w-xl rounded-2xl border border-border/80 bg-card/95 p-8 shadow-sm">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            Hi,怎么称呼你～
+          </h1>
+          <div className="mt-6 flex items-center gap-2">
+            <input
+              type="text"
+              value={introName}
+              onChange={(e) => setIntroName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleEnterQuestionnaire();
+                }
+              }}
+              placeholder="请输入你的称呼"
+              autoFocus
+              className="h-12 w-full rounded-lg border border-border bg-background px-4 text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-foreground/40"
+            />
+            <Button
+              type="button"
+              onClick={handleEnterQuestionnaire}
+              disabled={!introName.trim()}
+              className="h-12 min-w-12 px-0 text-lg"
+              aria-label="进入下一题"
+            >
+              {">"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-muted/20">
       <GuestBanner />
@@ -184,7 +255,7 @@ export default function QuestionnairePage() {
               variant="outline"
               size="sm"
               className="h-9 gap-1.5 px-3"
-              onClick={() => setShowUploadPanel((v) => !v)}
+              onClick={handleUploadAutofill}
               aria-label="上传材料"
             >
               <Paperclip className="h-3.5 w-3.5" />
@@ -205,6 +276,24 @@ export default function QuestionnairePage() {
       </header>
 
       <main className="mx-auto max-w-6xl px-6 py-8">
+        <div className="mb-6">
+          <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+            <span>完成度</span>
+            <span>{progress}%</span>
+          </div>
+          <div className="h-1.5 rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-foreground/80 transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+        <p className="mb-4 text-base text-muted-foreground">
+          {data.personalInfo.fullName.trim()
+            ? `${data.personalInfo.fullName.trim()} 你好，为定制化匹配项目，请补充更多信息～`
+            : "你好，为定制化匹配项目，请补充更多信息～"}
+        </p>
+
         {showUploadPanel && (
           <div className="mb-6 rounded-xl border border-border/80 bg-card/90 p-4">
             <div className="mb-3 flex items-center justify-between">
@@ -222,77 +311,7 @@ export default function QuestionnairePage() {
           </div>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
-          <aside className="lg:sticky lg:top-24 lg:h-fit">
-            <div className="rounded-xl border border-border/80 bg-card/90 p-3">
-              <div className="space-y-1">
-                {steps.map((step) => {
-                  const isCurrent = currentStep === step.number;
-                  return (
-                    <button
-                      key={step.number}
-                      onClick={() => handleStepClick(step.number)}
-                      className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
-                        isCurrent
-                          ? "bg-foreground text-background"
-                          : "text-muted-foreground/75 hover:bg-muted/40"
-                      }`}
-                    >
-                      <span className={`w-7 text-xs ${isCurrent ? "text-background/80" : "text-muted-foreground/70"}`}>{String(step.number).padStart(2, "0")}</span>
-                      <span className={isCurrent ? "font-medium" : "font-normal"}>{step.title}</span>
-                      {step.required && <span className={`text-xs ${isCurrent ? "text-background/80" : "text-muted-foreground/70"}`}>*</span>}
-                      {completionStatus.completedSteps.includes(step.number) && (
-                        <span
-                          className={`ml-auto inline-flex items-center ${isCurrent ? "text-background/85" : "text-muted-foreground/80"}`}
-                          aria-label="已完成"
-                          title="已完成"
-                        >
-                          <Check className="h-3.5 w-3.5" aria-hidden />
-                          <span className="sr-only">已完成</span>
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="mt-3 border-t border-border/60 px-2 pt-3">
-                <p className="mb-2 text-[10px] font-medium text-foreground/80">演示用两套完整示例</p>
-                <p className="mb-1.5 text-[10px] leading-relaxed text-muted-foreground">{SAMPLE_QUESTIONNAIRE_XIN_LIU_NOTE}</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mb-2 h-8 w-full text-xs font-normal"
-                  onClick={handleLoadXinLiuSample}
-                >
-                  载入示例 A · 设计/HCI
-                </Button>
-                <p className="mb-1.5 text-[10px] leading-relaxed text-muted-foreground">{SAMPLE_QUESTIONNAIRE_DEMO_NOTE}</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 w-full text-xs font-normal"
-                  onClick={handleLoadDemoSample}
-                >
-                  载入示例 B · 电子/嵌入式
-                </Button>
-              </div>
-              <div className="mt-3 border-t border-border/60 px-2 pt-3">
-                <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-                  <span>完成度</span>
-                  <span>{progress}%</span>
-                </div>
-                <div className="h-1.5 rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-foreground/80 transition-all duration-300"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-          </aside>
-
+        <div>
           <div className="min-h-[min(70vh,520px)] pr-1">
             <section
               key={currentStep}
@@ -316,18 +335,18 @@ export default function QuestionnairePage() {
             variant="ghost"
             onClick={handlePrevStep}
             disabled={currentStep <= 1}
-            className="h-10 min-w-28 text-muted-foreground"
+            className="h-10 min-w-10 px-0 text-muted-foreground"
+            aria-label="上一步"
           >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            上一步
+            {"<"}
           </Button>
           <Button
             type="button"
             onClick={handleNextStep}
-            className="h-10 min-w-32"
+            className="h-10 min-w-10 px-0"
+            aria-label="下一步"
           >
-            {currentStep === totalSteps ? "完成" : "下一步"}
-            <ArrowRight className="ml-2 h-4 w-4" />
+            {">"}
           </Button>
         </div>
       </div>

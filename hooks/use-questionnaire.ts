@@ -74,11 +74,10 @@ export function useQuestionnaire() {
     setData(initialQuestionnaireData);
   }, []);
 
-  const requiredStepNumbers = [1, 2] as const;
+  const requiredStepNumbers = [1, 3] as const;
 
   const hasRequiredPersonalInfo = useCallback(() => {
     return Boolean(
-      data.personalInfo.fullName.trim() &&
       data.personalInfo.intendedMajor.trim() &&
       data.personalInfo.targetSemester.trim() &&
       data.personalInfo.targetCountry.length > 0
@@ -98,7 +97,7 @@ export function useQuestionnaire() {
       completedSteps.add(1);
     }
     if (hasRequiredEducation()) {
-      completedSteps.add(2);
+      completedSteps.add(3);
     }
 
     const hasAnyTestScore = [
@@ -107,17 +106,24 @@ export function useQuestionnaire() {
       ...Object.values(data.tests.gre ?? {}),
       ...Object.values(data.tests.gmat ?? {}),
     ].some((value) => value.trim());
-    if (hasAnyTestScore) completedSteps.add(3);
-    if (data.workExperience.length > 0) completedSteps.add(4);
-    if (data.projects.length > 0) completedSteps.add(5);
-    if (data.honors.length > 0) completedSteps.add(6);
-    if (data.skills.length > 0) completedSteps.add(7);
+    if (
+      data.personalInfo.knownTargetSchools.trim() ||
+      data.personalInfo.targetCountry.length > 0
+    ) {
+      completedSteps.add(2);
+    }
+
+    if (hasAnyTestScore) completedSteps.add(4);
+    if (data.workExperience.length > 0) completedSteps.add(5);
+    if (data.projects.length > 0) completedSteps.add(6);
+    if (data.honors.length > 0) completedSteps.add(7);
+    if (data.skills.length > 0) completedSteps.add(8);
     if (
       data.personalInfo.futurePlan.trim() ||
       data.personalInfo.motivationNote.trim() ||
       data.personalInfo.otherApplicationNotes.trim()
     ) {
-      completedSteps.add(8);
+      completedSteps.add(9);
     }
 
     const missingRequiredSteps = requiredStepNumbers.filter((step) => !completedSteps.has(step));

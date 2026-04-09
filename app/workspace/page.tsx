@@ -414,19 +414,32 @@ export default function WorkspacePage() {
     node.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  const openQuestionnaire = () => {
+    if (typeof window === "undefined") return;
+    window.location.href = "/questionnaire";
+  };
+
+  const openBackgroundSummary = () => {
+    if (typeof window === "undefined") return;
+    window.location.href = "/background";
+  };
+
   const sidebarBody = (opts: { onPick?: () => void }) => (
     <>
       <div className="px-3 pb-4">
         <p className="mb-2 px-2 text-[11px] font-medium tracking-wide text-muted-foreground/80">浏览</p>
         <nav className="space-y-0.5" aria-label="浏览">
-          <Link
-            href="/questionnaire"
-            onClick={() => opts.onPick?.()}
+          <button
+            type="button"
+            onClick={() => {
+              opts.onPick?.();
+              openBackgroundSummary();
+            }}
             className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
           >
             <FileText className="h-4 w-4 shrink-0 opacity-70" />
             <span className="flex-1 truncate">我的背景</span>
-          </Link>
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -930,8 +943,8 @@ export default function WorkspacePage() {
                             <p className="text-xs text-amber-700 dark:text-amber-300">
                               还不能正式匹配：请先完成个人信息与教育背景。
                             </p>
-                            <Button size="sm" variant="outline" className="h-8" asChild>
-                              <Link href="/questionnaire">继续完善</Link>
+                            <Button size="sm" variant="outline" className="h-8" onClick={openQuestionnaire}>
+                              继续完善
                             </Button>
                           </div>
                         )}
@@ -945,10 +958,8 @@ export default function WorkspacePage() {
                         选校清单
                       </Link>
                     </Button>
-                    <Button variant="outline" size="sm" asChild>
-                      <Link href="/questionnaire">
-                        我的背景
-                      </Link>
+                    <Button variant="outline" size="sm" onClick={openBackgroundSummary}>
+                      我的背景
                     </Button>
                   </div>
 
