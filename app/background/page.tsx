@@ -200,13 +200,24 @@ export default function BackgroundPage() {
             <CardContent className="space-y-4">
               <div>
                 <p className="mb-2 text-sm font-medium text-foreground">工作经历</p>
-                {data.workExperience.length === 0 ? (
+                {draft.workExperience.length === 0 ? (
                   <p className="text-sm text-muted-foreground">未填</p>
                 ) : (
                   <div className="space-y-2">
-                    {data.workExperience.map((work) => (
+                    {draft.workExperience.map((work) => (
                       <div key={work.id} className="rounded-md border border-border/70 p-3 text-sm text-foreground">
-                        {(work.company || "未填公司")} · {(work.position || "未填岗位")}
+                        <p className="font-medium">{(work.company || "未填公司")} · {(work.position || "未填岗位")}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {(work.startDate || "未知开始")} - {work.isCurrent ? "至今" : (work.endDate || "未知结束")}
+                        </p>
+                        {(work.situation || work.task || work.action || work.result) && (
+                          <div className="mt-2 space-y-1.5 text-xs leading-relaxed text-muted-foreground">
+                            {work.situation && <p><span className="font-medium text-foreground/80">背景：</span>{work.situation}</p>}
+                            {work.task && <p><span className="font-medium text-foreground/80">职责：</span>{work.task}</p>}
+                            {work.action && <p><span className="font-medium text-foreground/80">行动：</span>{work.action}</p>}
+                            {work.result && <p><span className="font-medium text-foreground/80">结果：</span>{work.result}</p>}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -238,7 +249,20 @@ export default function BackgroundPage() {
                             />
                           </div>
                         ) : (
-                          <>{(proj.name || "未填项目")} · {(proj.role || "未填角色")}</>
+                          <div>
+                            <p className="font-medium">{(proj.name || "未填项目")} · {(proj.role || "未填角色")}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {(proj.startDate || "未知开始")} - {(proj.endDate || "未知结束")}
+                            </p>
+                            {(proj.situation || proj.task || proj.action || proj.result) && (
+                              <div className="mt-2 space-y-1.5 text-xs leading-relaxed text-muted-foreground">
+                                {proj.situation && <p><span className="font-medium text-foreground/80">背景：</span>{proj.situation}</p>}
+                                {proj.task && <p><span className="font-medium text-foreground/80">职责：</span>{proj.task}</p>}
+                                {proj.action && <p><span className="font-medium text-foreground/80">行动：</span>{proj.action}</p>}
+                                {proj.result && <p><span className="font-medium text-foreground/80">结果：</span>{proj.result}</p>}
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
                     ))}
