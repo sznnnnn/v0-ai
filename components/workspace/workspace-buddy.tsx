@@ -63,7 +63,7 @@ export function WorkspaceBuddy({ className }: { className?: string }) {
         role="status"
         aria-live="polite"
         className={cn(
-          "absolute bottom-[calc(100%+10px)] right-0 z-10 w-max max-w-[min(260px,calc(100vw-2rem))] rounded-xl border border-border bg-background px-3 py-2 text-left text-xs leading-snug text-foreground shadow-md transition-[opacity,transform] duration-300",
+          "absolute bottom-[calc(100%+10px)] right-2 sm:right-3 z-10 w-max max-w-[min(260px,calc(100vw-2rem))] rounded-xl border border-border bg-background px-3 py-2 text-left text-xs leading-snug text-foreground shadow-md transition-[opacity,transform] duration-300",
           open
             ? "opacity-100 translate-y-0"
             : "pointer-events-none opacity-0 translate-y-1"
@@ -71,7 +71,7 @@ export function WorkspaceBuddy({ className }: { className?: string }) {
       >
         <span className="block pr-0.5">{message}</span>
         <span
-          className="absolute -bottom-1 right-6 h-2 w-2 rotate-45 border-b border-r border-border bg-background"
+          className="absolute -bottom-1 right-5 h-2 w-2 rotate-45 border-b border-r border-border bg-background"
           aria-hidden
         />
       </div>
@@ -84,9 +84,9 @@ export function WorkspaceBuddy({ className }: { className?: string }) {
         <Image
           src="/workspace-buddy-avatar.png"
           alt=""
-          width={56}
-          height={56}
-          className="h-14 w-14 rounded-full object-cover object-[50%_15%]"
+          width={64}
+          height={64}
+          className="h-16 w-16 rounded-full object-cover object-[50%_15%]"
           aria-hidden
         />
       </button>

@@ -640,40 +640,11 @@ export default function WorkspacePage() {
 
           <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 md:py-8">
             <div className={cn("mx-auto", selectedSchool || selectedProgramPair ? "max-w-4xl" : "max-w-6xl")}>
-              <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-4">
-                  <div className="min-w-0 flex-1">
-                    <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-                      {selectedProgramPair
-                        ? selectedProgramPair.program.nameEn
-                        : selectedSchool
-                          ? selectedSchool.nameEn
-                          : "仪表盘"}
-                    </h1>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {selectedProgramPair ? (
-                        <>
-                          {selectedProgramPair.school.nameEn} · {selectedProgramPair.program.degree} ·{" "}
-                          {selectedProgramPair.program.duration}
-                        </>
-                      ) : selectedSchool ? (
-                        <>
-                          {selectedSchool.name} · {displayPrograms.length} 个项目
-                          {searchQuery ? ` · 已按搜索筛选` : ""}
-                        </>
-                      ) : (
-                        <>
-                          申请概览 · {dashboardStats.programs} 个项目 · {dashboardStats.schools} 所院校
-                          {searchQuery ? ` · 已按搜索筛选` : ""}
-                        </>
-                      )}
-                    </p>
-                  </div>
-                  {!selectedSchool && !selectedProgramPair ? <WorkspaceBuddy className="pt-0.5" /> : null}
+              {!selectedSchool && !selectedProgramPair ? (
+                <div className="mb-6 flex justify-end">
+                  <WorkspaceBuddy className="pt-2 sm:pt-3" />
                 </div>
-
-                <div className="h-9 w-9 shrink-0" aria-hidden />
-              </div>
+              ) : null}
 
               {selectedProgramPair && (
                 <section className="space-y-4">
@@ -710,9 +681,26 @@ export default function WorkspacePage() {
                             {selectedProgramPair.program.duration}
                           </p>
                         </div>
-                        <Button size="sm" className="shrink-0" asChild>
-                          <Link href={`/workspace/write/${selectedProgramPair.program.id}`}>写文书</Link>
-                        </Button>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {selectedProgramExtra?.links?.[0]?.url ? (
+                            <Button
+                              size="sm"
+                              className="bg-black text-white hover:bg-black/90 dark:bg-black dark:text-white dark:hover:bg-black/85"
+                              asChild
+                            >
+                              <a
+                                href={selectedProgramExtra.links[0].url}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                项目链接
+                              </a>
+                            </Button>
+                          ) : null}
+                          <Button size="sm" className="shrink-0" asChild>
+                            <Link href={`/workspace/write/${selectedProgramPair.program.id}`}>写文书</Link>
+                          </Button>
+                        </div>
                       </div>
                     </div>
 
@@ -861,42 +849,6 @@ export default function WorkspacePage() {
                       </div>
 
                       <aside className="space-y-3">
-                        <div className="space-y-1 rounded-md border border-border/70 p-3">
-                          <p className="text-xs font-medium text-muted-foreground">快速定位</p>
-                          <button
-                            type="button"
-                            className="block text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                            onClick={() => jumpToDetailSection("section-facts")}
-                          >
-                            项目信息
-                          </button>
-                          <button
-                            type="button"
-                            className="block text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                            onClick={() => jumpToDetailSection("section-overview")}
-                          >
-                            项目简介
-                          </button>
-                          {selectedProgramExtra && (
-                            <>
-                              <button
-                                type="button"
-                                className="block text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                                onClick={() => jumpToDetailSection("section-orientation")}
-                              >
-                                培养定位
-                              </button>
-                              <button
-                                type="button"
-                                className="block text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                                onClick={() => jumpToDetailSection("section-highlights")}
-                              >
-                                项目亮点
-                              </button>
-                            </>
-                          )}
-                        </div>
-
                         <div className="space-y-2 rounded-md border border-border/70 p-3">
                           <p className="text-xs font-medium text-muted-foreground">申请要求</p>
                           {selectedProgramPair.program.requirements.map((req, idx) => (
@@ -960,7 +912,7 @@ export default function WorkspacePage() {
                 <section className="mb-8 space-y-5" aria-label="申请概览仪表盘">
                   {questionnaireLoaded ? (
                     <Card className="gap-0 border-border/80 py-0 shadow-none">
-                      <CardContent className="px-4 py-3">
+                      <CardContent className="px-4 py-2.5">
                         <div className="mb-2 flex items-center justify-between text-sm text-muted-foreground">
                           <span>背景资料完成度</span>
                           <span className="tabular-nums">{questionnaireProgress}%</span>
@@ -972,9 +924,7 @@ export default function WorkspacePage() {
                           />
                         </div>
                         {questionnaireCompletion.canGenerateMatch ? (
-                          <p className="mt-2 text-xs text-muted-foreground">
-                            必填信息已完整，可继续更新背景提升匹配质量。
-                          </p>
+                          <p className="mt-1.5 text-xs text-muted-foreground">必填信息已完整，可继续补充背景。</p>
                         ) : (
                           <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                             <p className="text-xs text-amber-700 dark:text-amber-300">

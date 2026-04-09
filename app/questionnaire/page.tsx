@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ArrowRight, Paperclip, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Paperclip, X } from "lucide-react";
 import { GuestBanner } from "@/components/questionnaire/guest-banner";
 import { FileUpload } from "@/components/questionnaire/file-upload";
 import { PersonalInfoForm } from "@/components/questionnaire/steps/personal-info";
@@ -242,8 +242,13 @@ export default function QuestionnairePage() {
                       <span className={isCurrent ? "font-medium" : "font-normal"}>{step.title}</span>
                       {step.required && <span className={`text-xs ${isCurrent ? "text-background/80" : "text-muted-foreground/70"}`}>*</span>}
                       {completionStatus.completedSteps.includes(step.number) && (
-                        <span className={`ml-auto text-[10px] ${isCurrent ? "text-background/80" : "text-muted-foreground/70"}`}>
-                          已完成
+                        <span
+                          className={`ml-auto inline-flex items-center ${isCurrent ? "text-background/85" : "text-muted-foreground/80"}`}
+                          aria-label="已完成"
+                          title="已完成"
+                        >
+                          <Check className="h-3.5 w-3.5" aria-hidden />
+                          <span className="sr-only">已完成</span>
                         </span>
                       )}
                     </button>
