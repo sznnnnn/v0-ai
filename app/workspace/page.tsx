@@ -302,21 +302,6 @@ export default function WorkspacePage() {
   }, [schoolDraftSheets, showAllSchoolDrafts]);
   const schoolDraftSheetsNeedExpand = schoolDraftSheets.length > schoolDraftSheetsLimit;
 
-  const stats = useMemo(() => {
-    const statusCounts = {
-      todo: 0,
-      "in-progress": 0,
-      submitted: 0,
-      accepted: 0,
-      rejected: 0,
-    };
-    addedProgramIds.forEach((id) => {
-      const status = applications[id] || "todo";
-      statusCounts[status]++;
-    });
-    return statusCounts;
-  }, [addedProgramIds, applications]);
-
   /** 与当前主列表一致（含搜索筛选）的仪表盘数字 */
   const dashboardStats = useMemo(() => {
     const statusCounts = {
@@ -455,14 +440,10 @@ export default function WorkspacePage() {
                       <span className="min-w-0 flex-1 truncate text-xs leading-snug text-foreground/90">
                         {abbrevLabelForDraftProgram(d.programId)}
                       </span>
-                      <span className="shrink-0 text-[10px] font-medium tabular-nums text-muted-foreground/90">
-                        {d.kinds.length}
-                      </span>
                     </Link>
                   </TooltipTrigger>
                   <TooltipContent side="right" className="max-w-[min(280px,calc(100vw-3rem))]">
                     <p className="font-medium">{labelForDraftProgram(d.programId)}</p>
-                    <p className="mt-0.5 text-[10px] opacity-90">{d.kinds.length} 类文书</p>
                   </TooltipContent>
                 </Tooltip>
               ))}
@@ -476,22 +457,7 @@ export default function WorkspacePage() {
 
   const sidebarFooter = (opts: { onPick?: () => void }) => (
     <div className="border-t border-border/60 bg-muted/10 px-3 py-3">
-      <p className="mb-2 px-2 text-[11px] font-medium tracking-wide text-muted-foreground/80">进度</p>
-      <div className="space-y-1 px-2 text-xs text-muted-foreground">
-        <div className="flex justify-between gap-2">
-          <span>待申请</span>
-          <span className="tabular-nums text-foreground">{stats.todo}</span>
-        </div>
-        <div className="flex justify-between gap-2">
-          <span>进行中</span>
-          <span className="tabular-nums text-foreground">{stats["in-progress"] + stats.submitted}</span>
-        </div>
-        <div className="flex justify-between gap-2">
-          <span>已有结果</span>
-          <span className="tabular-nums text-foreground">{stats.accepted + stats.rejected}</span>
-        </div>
-      </div>
-      <div className="mt-3 flex flex-col gap-1 border-t border-border/40 pt-3">
+      <div className="flex flex-col gap-1">
         <button
           type="button"
           onClick={() => {
@@ -706,7 +672,7 @@ export default function WorkspacePage() {
                           <WorkspaceApplicationsMap
                             pins={workspaceMapPins}
                             onSelectSchool={(id) => selectSchool(id)}
-                            className="max-w-none shadow-none"
+                            className="mx-auto max-w-[280px] shadow-none"
                           />
                         </div>
                       </section>
