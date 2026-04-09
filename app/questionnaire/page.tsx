@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ArrowRight, Check, Paperclip, X } from "lucide-react";
@@ -29,6 +29,7 @@ import {
 
 export default function QuestionnairePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data, isLoaded, saveData, setCurrentStep, getCompletionStatus } = useQuestionnaire();
   const [showUploadPanel, setShowUploadPanel] = useState(false);
   const [navigationHint, setNavigationHint] = useState("");
@@ -57,6 +58,19 @@ export default function QuestionnairePage() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [currentStep]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    const mode = searchParams.get("mode");
+    const stepParam = Number(searchParams.get("step"));
+    const isValidStep = Number.isInteger(stepParam) && stepParam >= 1 && stepParam <= totalSteps;
+    if (mode === "edit" || isValidStep) {
+      setHasEnteredQuestionnaire(true);
+    }
+    if (isValidStep) {
+      setCurrentStep(stepParam);
+    }
+  }, [isLoaded, searchParams, setCurrentStep, totalSteps]);
 
   const handleStepClick = useCallback(
     (step: number) => {
@@ -208,7 +222,7 @@ export default function QuestionnairePage() {
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-background via-background to-muted/20 px-6">
         <div className="w-full max-w-xl rounded-2xl border border-border/80 bg-card/95 p-8 shadow-sm">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Hi,怎么称呼你～
+            你好，怎么称呼你？
           </h1>
           <div className="mt-6 flex items-center gap-2">
             <input
@@ -221,7 +235,7 @@ export default function QuestionnairePage() {
                   handleEnterQuestionnaire();
                 }
               }}
-              placeholder="请输入你的称呼"
+              placeholder="你的称呼"
               autoFocus
               className="h-12 w-full rounded-lg border border-border bg-background px-4 text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-foreground/40"
             />
@@ -290,8 +304,8 @@ export default function QuestionnairePage() {
         </div>
         <p className="mb-4 text-base text-muted-foreground">
           {data.personalInfo.fullName.trim()
-            ? `${data.personalInfo.fullName.trim()} 你好，为定制化匹配项目，请补充更多信息～`
-            : "你好，为定制化匹配项目，请补充更多信息～"}
+            ? `${data.personalInfo.fullName.trim()}，补充一下背景信息`
+            : "补充一下背景信息"}
         </p>
 
         {showUploadPanel && (
