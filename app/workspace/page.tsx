@@ -41,6 +41,9 @@ import {
   MapPin,
   ExternalLink,
   ChevronRight,
+  User,
+  Briefcase,
+  FolderGit2,
 } from "lucide-react";
 import { GuestBanner } from "@/components/questionnaire/guest-banner";
 import { SchoolLogoMark } from "@/components/match/school-logo-mark";
@@ -48,7 +51,7 @@ import { SchoolRichInfo } from "@/components/match/school-rich-info";
 import { ProgramCard } from "@/components/match/program-card";
 import { WorkspaceBuddy } from "@/components/workspace/workspace-buddy";
 import { useMatchResult, useQuestionnaire } from "@/hooks/use-questionnaire";
-import type { Program, School } from "@/lib/types";
+import type { Program, QuestionnaireData, School } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
   DOCUMENT_DRAFT_LABELS,
@@ -112,13 +115,19 @@ export default function WorkspacePage() {
   const {
     data: questionnaireData,
     isLoaded: questionnaireLoaded,
+    saveData,
     getCompletionStatus,
   } = useQuestionnaire();
   const [addedProgramIds, setAddedProgramIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [applications, setApplications] = useState<Record<string, ApplicationItem["status"]>>({});
   const [selectedSchoolId, setSelectedSchoolId] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<"dashboard" | "background">("dashboard");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [isBackgroundEditing, setIsBackgroundEditing] = useState(false);
+  const [backgroundDraft, setBackgroundDraft] = useState<
+    Pick<QuestionnaireData, "personalInfo" | "workExperience" | "projects"> | null
+  >(null);
   const [draftRefresh, setDraftRefresh] = useState(0);
   /** 避免在首屏 render 中读 localStorage，与 SSR 空草稿树一致，消除 hydration mismatch */
   const [draftStorageReady, setDraftStorageReady] = useState(false);
@@ -168,6 +177,15 @@ export default function WorkspacePage() {
       curriculum: false,
     });
   }, [selectedProgramId]);
+
+  useEffect(() => {
+    if (isBackgroundEditing) return;
+    setBackgroundDraft({
+      personalInfo: questionnaireData.personalInfo,
+      workExperience: questionnaireData.workExperience,
+      projects: questionnaireData.projects,
+    });
+  }, [isBackgroundEditing, questionnaireData]);
 
   const programIdsWithDrafts = useMemo(() => {
     if (!draftStorageReady) return new Set<string>();
@@ -420,8 +438,73 @@ export default function WorkspacePage() {
   };
 
   const openBackgroundSummary = () => {
-    if (typeof window === "undefined") return;
-    window.location.href = "/background";
+    setSelectedSchoolId(null);
+    setSelectedProgramId(null);
+    setActiveView("background");
+  };
+
+  const updateBackgroundPersonalInfo = (
+    field: keyof QuestionnaireData["personalInfo"],
+    value: string
+  ) => {
+    setBackgroundDraft((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        personalInfo: {
+          ...prev.personalInfo,
+          [field]: value,
+        },
+      };
+    });
+  };
+
+  const updateBackgroundWork = (
+    index: number,
+    field: keyof QuestionnaireData["workExperience"][number],
+    value: string
+  ) => {
+    setBackgroundDraft((prev) => {
+      if (!prev) return prev;
+      const next = prev.workExperience.map((item, i) =>
+        i === index ? { ...item, [field]: value } : item
+      );
+      return { ...prev, workExperience: next };
+    });
+  };
+
+  const updateBackgroundProject = (
+    index: number,
+    field: keyof QuestionnaireData["projects"][number],
+    value: string
+  ) => {
+    setBackgroundDraft((prev) => {
+      if (!prev) return prev;
+      const next = prev.projects.map((item, i) =>
+        i === index ? { ...item, [field]: value } : item
+      );
+      return { ...prev, projects: next };
+    });
+  };
+
+  const cancelBackgroundEdit = () => {
+    setIsBackgroundEditing(false);
+    setBackgroundDraft({
+      personalInfo: questionnaireData.personalInfo,
+      workExperience: questionnaireData.workExperience,
+      projects: questionnaireData.projects,
+    });
+  };
+
+  const saveBackgroundEdit = () => {
+    if (!backgroundDraft) return;
+    saveData({
+      personalInfo: backgroundDraft.personalInfo,
+      workExperience: backgroundDraft.workExperience,
+      projects: backgroundDraft.projects,
+    });
+    setIsBackgroundEditing(false);
+    setLiveMessage("我的背景已保存");
   };
 
   const sidebarBody = (opts: { onPick?: () => void }) => (
@@ -432,23 +515,14 @@ export default function WorkspacePage() {
           <button
             type="button"
             onClick={() => {
-              opts.onPick?.();
-              openBackgroundSummary();
-            }}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-          >
-            <FileText className="h-4 w-4 shrink-0 opacity-70" />
-            <span className="flex-1 truncate">我的背景</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
               setSelectedSchoolId(null);
+              setSelectedProgramId(null);
+              setActiveView("dashboard");
               opts.onPick?.();
             }}
             className={cn(
               "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
-              selectedSchoolId == null
+              selectedSchoolId == null && activeView === "dashboard"
                 ? "bg-muted/80 text-foreground"
                 : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
             )}
@@ -458,6 +532,22 @@ export default function WorkspacePage() {
             {addedPrograms.length > 0 && (
               <span className="text-xs text-muted-foreground">{addedPrograms.length}</span>
             )}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              opts.onPick?.();
+              openBackgroundSummary();
+            }}
+            className={cn(
+              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+              activeView === "background"
+                ? "bg-muted/80 text-foreground"
+                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+            )}
+          >
+            <FileText className="h-4 w-4 shrink-0 opacity-70" />
+            <span className="flex-1 truncate">我的背景</span>
           </button>
         </nav>
       </div>
@@ -641,7 +731,9 @@ export default function WorkspacePage() {
               <p className="truncate text-xs text-muted-foreground">
                 {selectedSchool
                   ? `${selectedSchool.name} · ${displayPrograms.length} 项`
-                  : "仪表盘"}
+                  : activeView === "background"
+                    ? "我的背景"
+                    : "仪表盘"}
               </p>
             </div>
             <Link href="/" className="shrink-0">
@@ -653,7 +745,7 @@ export default function WorkspacePage() {
 
           <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 md:py-8">
             <div className={cn("mx-auto", selectedSchool || selectedProgramPair ? "max-w-4xl" : "max-w-6xl")}>
-              {!selectedSchool && !selectedProgramPair ? (
+              {!selectedSchool && !selectedProgramPair && activeView === "dashboard" ? (
                 <div className="mb-6 flex justify-end">
                   <WorkspaceBuddy className="pt-2 sm:pt-3" />
                 </div>
@@ -921,7 +1013,7 @@ export default function WorkspacePage() {
                 </section>
               )}
 
-              {!selectedSchool && !selectedProgramPair && (
+              {!selectedSchool && !selectedProgramPair && activeView === "dashboard" && (
                 <section className="mb-8 space-y-5" aria-label="申请概览仪表盘">
                   {questionnaireLoaded ? (
                     <Card className="gap-0 border-border/80 py-0 shadow-none">
@@ -951,17 +1043,6 @@ export default function WorkspacePage() {
                       </CardContent>
                     </Card>
                   ) : null}
-
-                  <div className="flex flex-wrap items-center gap-2 border-b border-border/60 pb-4">
-                    <Button variant="outline" size="sm" asChild>
-                      <Link href="/match">
-                        选校清单
-                      </Link>
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={openBackgroundSummary}>
-                      我的背景
-                    </Button>
-                  </div>
 
                   {addedPrograms.length > 0 ? (
                     <section className="space-y-3" aria-label="概览指标">
@@ -1010,6 +1091,249 @@ export default function WorkspacePage() {
                     </section>
                   ) : null}
 
+                </section>
+              )}
+
+              {!selectedSchool && !selectedProgramPair && activeView === "background" && (
+                <section className="space-y-5" aria-label="我的背景">
+                  <div className="flex justify-end gap-2">
+                    {isBackgroundEditing ? (
+                      <>
+                        <Button size="sm" variant="outline" onClick={cancelBackgroundEdit}>
+                          取消
+                        </Button>
+                        <Button size="sm" onClick={saveBackgroundEdit}>
+                          保存
+                        </Button>
+                      </>
+                    ) : (
+                      <Button size="sm" variant="outline" onClick={() => setIsBackgroundEditing(true)}>
+                        编辑我的背景
+                      </Button>
+                    )}
+                  </div>
+                  <Card className="border-border/80 bg-card/95 shadow-none">
+                    <CardHeader className="pb-1">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <User className="h-4 w-4 text-muted-foreground" />
+                        基本信息
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+                        <div className="space-y-1 border-b border-border/60 pb-2 sm:border-0 sm:pb-0">
+                          <p className="text-[11px] tracking-wide text-muted-foreground">称呼</p>
+                          {isBackgroundEditing ? (
+                            <Input
+                              value={backgroundDraft?.personalInfo.fullName || ""}
+                              onChange={(e) => updateBackgroundPersonalInfo("fullName", e.target.value)}
+                              className="h-8 border-border/70 bg-background/80"
+                            />
+                          ) : (
+                            <p className="font-medium text-foreground">{questionnaireData.personalInfo.fullName || "未填"}</p>
+                          )}
+                        </div>
+                        <div className="space-y-1 border-b border-border/60 pb-2 sm:border-0 sm:pb-0">
+                          <p className="text-[11px] tracking-wide text-muted-foreground">专业</p>
+                          {isBackgroundEditing ? (
+                            <Input
+                              value={backgroundDraft?.personalInfo.intendedMajor || ""}
+                              onChange={(e) => updateBackgroundPersonalInfo("intendedMajor", e.target.value)}
+                              className="h-8 border-border/70 bg-background/80"
+                            />
+                          ) : (
+                            <p className="font-medium text-foreground">{questionnaireData.personalInfo.intendedMajor || "未填"}</p>
+                          )}
+                        </div>
+                        <div className="space-y-1 border-b border-border/60 pb-2 sm:border-0 sm:pb-0">
+                          <p className="text-[11px] tracking-wide text-muted-foreground">领域</p>
+                          {isBackgroundEditing ? (
+                            <Input
+                              value={backgroundDraft?.personalInfo.intendedApplicationField || ""}
+                              onChange={(e) => updateBackgroundPersonalInfo("intendedApplicationField", e.target.value)}
+                              className="h-8 border-border/70 bg-background/80"
+                            />
+                          ) : (
+                            <p className="font-medium text-foreground">{questionnaireData.personalInfo.intendedApplicationField || "未填"}</p>
+                          )}
+                        </div>
+                        <div className="space-y-1 border-b border-border/60 pb-2 sm:border-0 sm:pb-0">
+                          <p className="text-[11px] tracking-wide text-muted-foreground">入学</p>
+                          {isBackgroundEditing ? (
+                            <Input
+                              value={backgroundDraft?.personalInfo.targetSemester || ""}
+                              onChange={(e) => updateBackgroundPersonalInfo("targetSemester", e.target.value)}
+                              className="h-8 border-border/70 bg-background/80"
+                            />
+                          ) : (
+                            <p className="font-medium text-foreground">{questionnaireData.personalInfo.targetSemester || "未填"}</p>
+                          )}
+                        </div>
+                        <div className="space-y-1 sm:col-span-2">
+                          <p className="text-[11px] tracking-wide text-muted-foreground">预算</p>
+                          {isBackgroundEditing ? (
+                            <Input
+                              value={backgroundDraft?.personalInfo.budgetEstimate || ""}
+                              onChange={(e) => updateBackgroundPersonalInfo("budgetEstimate", e.target.value)}
+                              className="h-8 border-border/70 bg-background/80"
+                            />
+                          ) : (
+                            <p className="font-medium text-foreground">{questionnaireData.personalInfo.budgetEstimate || "未填"}</p>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-border/80 bg-card/95 shadow-none">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Briefcase className="h-4 w-4 text-muted-foreground" />
+                        工作经历
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {(isBackgroundEditing ? backgroundDraft?.workExperience : questionnaireData.workExperience)?.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">未填</p>
+                      ) : (
+                        (isBackgroundEditing ? backgroundDraft?.workExperience : questionnaireData.workExperience)?.map((work, index) => (
+                          <article key={work.id} className="rounded-lg border border-border/70 bg-muted/[0.08] p-3.5">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              {isBackgroundEditing ? (
+                                <div className="grid w-full gap-2 sm:grid-cols-2">
+                                  <Input
+                                    value={work.company}
+                                    onChange={(e) => updateBackgroundWork(index, "company", e.target.value)}
+                                    placeholder="公司"
+                                    className="h-8 border-border/70 bg-background/80"
+                                  />
+                                  <Input
+                                    value={work.position}
+                                    onChange={(e) => updateBackgroundWork(index, "position", e.target.value)}
+                                    placeholder="岗位"
+                                    className="h-8 border-border/70 bg-background/80"
+                                  />
+                                  <Input
+                                    value={work.startDate}
+                                    onChange={(e) => updateBackgroundWork(index, "startDate", e.target.value)}
+                                    placeholder="开始时间"
+                                    className="h-8 border-border/70 bg-background/80"
+                                  />
+                                  <Input
+                                    value={work.endDate}
+                                    onChange={(e) => updateBackgroundWork(index, "endDate", e.target.value)}
+                                    placeholder="结束时间"
+                                    className="h-8 border-border/70 bg-background/80"
+                                  />
+                                </div>
+                              ) : (
+                                <>
+                                  <p className="text-sm font-semibold text-foreground">
+                                    {(work.company || "未填公司")} · {(work.position || "未填岗位")}
+                                  </p>
+                                  <span className="rounded-md border border-border/70 bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
+                                    {work.startDate || "未知开始"} - {work.isCurrent ? "至今" : (work.endDate || "未知结束")}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                            <div className="mt-3 space-y-2 text-xs leading-relaxed text-muted-foreground">
+                              {isBackgroundEditing ? (
+                                <div className="space-y-2">
+                                  <Input value={work.situation} onChange={(e) => updateBackgroundWork(index, "situation", e.target.value)} placeholder="背景" className="h-8 border-border/70 bg-background/80 text-xs" />
+                                  <Input value={work.task} onChange={(e) => updateBackgroundWork(index, "task", e.target.value)} placeholder="职责" className="h-8 border-border/70 bg-background/80 text-xs" />
+                                  <Input value={work.action} onChange={(e) => updateBackgroundWork(index, "action", e.target.value)} placeholder="行动" className="h-8 border-border/70 bg-background/80 text-xs" />
+                                  <Input value={work.result} onChange={(e) => updateBackgroundWork(index, "result", e.target.value)} placeholder="结果" className="h-8 border-border/70 bg-background/80 text-xs" />
+                                </div>
+                              ) : (
+                                <>
+                                  {work.situation && <p><span className="font-medium text-foreground/85">背景：</span>{work.situation}</p>}
+                                  {work.task && <p><span className="font-medium text-foreground/85">职责：</span>{work.task}</p>}
+                                  {work.action && <p><span className="font-medium text-foreground/85">行动：</span>{work.action}</p>}
+                                  {work.result && <p><span className="font-medium text-foreground/85">结果：</span>{work.result}</p>}
+                                </>
+                              )}
+                            </div>
+                          </article>
+                        ))
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-border/80 bg-card/95 shadow-none">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <FolderGit2 className="h-4 w-4 text-muted-foreground" />
+                        项目经历
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {(isBackgroundEditing ? backgroundDraft?.projects : questionnaireData.projects)?.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">未填</p>
+                      ) : (
+                        (isBackgroundEditing ? backgroundDraft?.projects : questionnaireData.projects)?.map((proj, index) => (
+                          <article key={proj.id} className="rounded-lg border border-border/70 bg-muted/[0.08] p-3.5">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              {isBackgroundEditing ? (
+                                <div className="grid w-full gap-2 sm:grid-cols-2">
+                                  <Input
+                                    value={proj.name}
+                                    onChange={(e) => updateBackgroundProject(index, "name", e.target.value)}
+                                    placeholder="项目名"
+                                    className="h-8 border-border/70 bg-background/80"
+                                  />
+                                  <Input
+                                    value={proj.role}
+                                    onChange={(e) => updateBackgroundProject(index, "role", e.target.value)}
+                                    placeholder="角色"
+                                    className="h-8 border-border/70 bg-background/80"
+                                  />
+                                  <Input
+                                    value={proj.startDate}
+                                    onChange={(e) => updateBackgroundProject(index, "startDate", e.target.value)}
+                                    placeholder="开始时间"
+                                    className="h-8 border-border/70 bg-background/80"
+                                  />
+                                  <Input
+                                    value={proj.endDate}
+                                    onChange={(e) => updateBackgroundProject(index, "endDate", e.target.value)}
+                                    placeholder="结束时间"
+                                    className="h-8 border-border/70 bg-background/80"
+                                  />
+                                </div>
+                              ) : (
+                                <>
+                                  <p className="text-sm font-semibold text-foreground">
+                                    {(proj.name || "未填项目")} · {(proj.role || "未填角色")}
+                                  </p>
+                                  <span className="rounded-md border border-border/70 bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
+                                    {proj.startDate || "未知开始"} - {(proj.endDate || "未知结束")}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                            <div className="mt-3 space-y-2 text-xs leading-relaxed text-muted-foreground">
+                              {isBackgroundEditing ? (
+                                <div className="space-y-2">
+                                  <Input value={proj.situation} onChange={(e) => updateBackgroundProject(index, "situation", e.target.value)} placeholder="背景" className="h-8 border-border/70 bg-background/80 text-xs" />
+                                  <Input value={proj.task} onChange={(e) => updateBackgroundProject(index, "task", e.target.value)} placeholder="职责" className="h-8 border-border/70 bg-background/80 text-xs" />
+                                  <Input value={proj.action} onChange={(e) => updateBackgroundProject(index, "action", e.target.value)} placeholder="行动" className="h-8 border-border/70 bg-background/80 text-xs" />
+                                  <Input value={proj.result} onChange={(e) => updateBackgroundProject(index, "result", e.target.value)} placeholder="结果" className="h-8 border-border/70 bg-background/80 text-xs" />
+                                </div>
+                              ) : (
+                                <>
+                                  {proj.situation && <p><span className="font-medium text-foreground/85">背景：</span>{proj.situation}</p>}
+                                  {proj.task && <p><span className="font-medium text-foreground/85">职责：</span>{proj.task}</p>}
+                                  {proj.action && <p><span className="font-medium text-foreground/85">行动：</span>{proj.action}</p>}
+                                  {proj.result && <p><span className="font-medium text-foreground/85">结果：</span>{proj.result}</p>}
+                                </>
+                              )}
+                            </div>
+                          </article>
+                        ))
+                      )}
+                    </CardContent>
+                  </Card>
                 </section>
               )}
 
@@ -1128,14 +1452,14 @@ export default function WorkspacePage() {
                 </div>
               )}
 
-              {!selectedSchool && !selectedProgramPair && addedPrograms.length > 0 && (
+              {!selectedSchool && !selectedProgramPair && activeView === "dashboard" && addedPrograms.length > 0 && (
                 <div id="workspace-application-list" className="mb-4 flex items-center gap-2">
                   <LayoutDashboard className="h-4 w-4 text-muted-foreground" aria-hidden />
                   <h2 className="text-sm font-medium text-foreground">申请列表</h2>
                 </div>
               )}
 
-              {!selectedProgramPair &&
+              {!selectedProgramPair && activeView === "dashboard" &&
               (addedPrograms.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border p-12 text-center">
                   <GraduationCap className="mx-auto mb-4 h-14 w-14 text-muted-foreground" />
