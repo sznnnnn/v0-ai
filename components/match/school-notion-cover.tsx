@@ -1,12 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { MapPin, Trophy } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { School } from "@/lib/types";
 import { SchoolLogoMark } from "@/components/match/school-logo-mark";
-import { resolveSchoolHeroImage } from "@/lib/school-hero-image";
 
 const categoryCn: Record<School["category"], string> = {
   reach: "冲刺",
@@ -20,32 +18,9 @@ type SchoolNotionCoverProps = {
 };
 
 export function SchoolNotionCover({ school, className }: SchoolNotionCoverProps) {
-  const [heroImage, setHeroImage] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    resolveSchoolHeroImage(school).then((url) => {
-      if (!active) return;
-      setHeroImage(url);
-    });
-    return () => {
-      active = false;
-    };
-  }, [school]);
-
   return (
     <div className={cn("overflow-hidden border-b border-border/80", className)}>
-      {heroImage ? (
-        <div className="relative h-36 sm:h-44">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={heroImage} alt="" className="h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-background/20" />
-        </div>
-      ) : (
-        <div className="h-8 bg-muted/[0.14]" />
-      )}
-
-      <div className="bg-muted/[0.14] px-4 pb-5 pt-4 sm:px-6 sm:pt-5">
+      <div className="bg-muted/[0.14] px-4 py-5 sm:px-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-5">
           <SchoolLogoMark school={school} size="xl" rounded="xl" />
           <div className="min-w-0 flex-1">

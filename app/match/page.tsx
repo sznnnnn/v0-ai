@@ -24,6 +24,10 @@ const CATEGORY_ITEMS: { id: CategoryFilter; label: string; index: string }[] = [
   { id: "safety", label: "保底", index: "04" },
 ];
 
+function uniqueProgramIds(ids: string[]): string[] {
+  return [...new Set(ids.filter((id) => typeof id === "string" && id.length > 0))];
+}
+
 interface AnalysisStep {
   title: string;
   details: string;
@@ -82,6 +86,12 @@ export default function MatchPage() {
   const [addedPrograms, setAddedPrograms] = useState<string[]>([]);
   const generationTimersRef = useRef<number[]>([]);
 
+  const persistAddedPrograms = useCallback((ids: string[]) => {
+    const normalized = uniqueProgramIds(ids);
+    setAddedPrograms(normalized);
+    localStorage.setItem("edumatch_added_programs", JSON.stringify(normalized));
+  }, []);
+
   const clearGenerationTimers = useCallback(() => {
     generationTimersRef.current.forEach((id) => window.clearTimeout(id));
     generationTimersRef.current = [];
@@ -108,6 +118,7 @@ export default function MatchPage() {
     const finishTimerId = window.setTimeout(() => {
       const newResult = generateMatchResult(questionnaireData);
       saveResult(newResult);
+      setSelectedSchool(null);
       setIsGenerating(false);
     }, instant ? 80 : steps.length * stepDuration + 300);
     generationTimersRef.current.push(finishTimerId);
@@ -127,21 +138,27 @@ export default function MatchPage() {
 
   useEffect(() => {
     const stored = localStorage.getItem("edumatch_added_programs");
-    if (stored) {
-      setAddedPrograms(JSON.parse(stored));
+    if (!stored) return;
+    try {
+      const parsed = JSON.parse(stored);
+      if (!Array.isArray(parsed)) {
+        localStorage.removeItem("edumatch_added_programs");
+        return;
+      }
+      const normalized = uniqueProgramIds(parsed.filter((item): item is string => typeof item === "string"));
+      setAddedPrograms(normalized);
+      localStorage.setItem("edumatch_added_programs", JSON.stringify(normalized));
+    } catch {
+      localStorage.removeItem("edumatch_added_programs");
     }
   }, []);
 
   const handleAddProgram = (programId: string) => {
-    const updated = [...addedPrograms, programId];
-    setAddedPrograms(updated);
-    localStorage.setItem("edumatch_added_programs", JSON.stringify(updated));
+    persistAddedPrograms([...addedPrograms, programId]);
   };
 
   const handleRemoveProgram = (programId: string) => {
-    const updated = addedPrograms.filter((id) => id !== programId);
-    setAddedPrograms(updated);
-    localStorage.setItem("edumatch_added_programs", JSON.stringify(updated));
+    persistAddedPrograms(addedPrograms.filter((id) => id !== programId));
   };
 
   const handleToggleSchoolPrograms = (schoolId: string) => {
@@ -152,8 +169,7 @@ export default function MatchPage() {
     const updated = allIn
       ? addedPrograms.filter((id) => !ids.includes(id))
       : [...new Set([...addedPrograms, ...ids])];
-    setAddedPrograms(updated);
-    localStorage.setItem("edumatch_added_programs", JSON.stringify(updated));
+    persistAddedPrograms(updated);
   };
 
   const handleRegenerate = () => {
@@ -199,6 +215,13 @@ export default function MatchPage() {
       return schoolA - schoolB;
     });
   }, [result, categoryFilter, selectedSchool]);
+
+  useEffect(() => {
+    if (!selectedSchool) return;
+    const stillVisible = filteredSchools.some((school) => school.id === selectedSchool.id);
+    if (stillVisible) return;
+    setSelectedSchool(filteredSchools[0] ?? null);
+  }, [filteredSchools, selectedSchool]);
 
   if (!isQuestionnaireLoaded || !isResultLoaded) {
     return (
