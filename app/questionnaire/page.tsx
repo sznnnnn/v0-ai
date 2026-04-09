@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ArrowRight, Check, Paperclip, X } from "lucide-react";
@@ -29,7 +29,6 @@ import {
 
 export default function QuestionnairePage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { data, isLoaded, saveData, setCurrentStep, getCompletionStatus } = useQuestionnaire();
   const [showUploadPanel, setShowUploadPanel] = useState(false);
   const [navigationHint, setNavigationHint] = useState("");
@@ -61,8 +60,9 @@ export default function QuestionnairePage() {
 
   useEffect(() => {
     if (!isLoaded) return;
-    const mode = searchParams.get("mode");
-    const stepParam = Number(searchParams.get("step"));
+    const params = new URLSearchParams(window.location.search);
+    const mode = params.get("mode");
+    const stepParam = Number(params.get("step"));
     const isValidStep = Number.isInteger(stepParam) && stepParam >= 1 && stepParam <= totalSteps;
     if (mode === "edit" || isValidStep) {
       setHasEnteredQuestionnaire(true);
@@ -70,7 +70,7 @@ export default function QuestionnairePage() {
     if (isValidStep) {
       setCurrentStep(stepParam);
     }
-  }, [isLoaded, searchParams, setCurrentStep, totalSteps]);
+  }, [isLoaded, setCurrentStep, totalSteps]);
 
   const handleStepClick = useCallback(
     (step: number) => {
