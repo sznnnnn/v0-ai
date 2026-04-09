@@ -161,9 +161,8 @@ export default function MatchPage() {
     persistAddedPrograms(addedPrograms.filter((id) => id !== programId));
   };
 
-  const handleToggleSchoolPrograms = (schoolId: string) => {
-    if (!result) return;
-    const ids = result.programs.filter((p) => p.schoolId === schoolId).map((p) => p.id);
+  const handleToggleVisiblePrograms = () => {
+    const ids = filteredPrograms.map((program) => program.id);
     if (ids.length === 0) return;
     const allIn = ids.every((id) => addedPrograms.includes(id));
     const updated = allIn
@@ -220,7 +219,7 @@ export default function MatchPage() {
     if (!selectedSchool) return;
     const stillVisible = filteredSchools.some((school) => school.id === selectedSchool.id);
     if (stillVisible) return;
-    setSelectedSchool(filteredSchools[0] ?? null);
+    setSelectedSchool(null);
   }, [filteredSchools, selectedSchool]);
 
   if (!isQuestionnaireLoaded || !isResultLoaded) {
@@ -379,7 +378,10 @@ export default function MatchPage() {
                     <button
                       key={id}
                       type="button"
-                      onClick={() => setCategoryFilter(id)}
+                      onClick={() => {
+                        setCategoryFilter(id);
+                        setSelectedSchool(null);
+                      }}
                       className={cn(
                         "flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-left text-sm transition-colors",
                         active
@@ -424,9 +426,6 @@ export default function MatchPage() {
                       key={school.id}
                       school={school}
                       programCount={programCount}
-                      schoolProgramIds={schoolPrograms.map((p) => p.id)}
-                      addedProgramIds={addedPrograms}
-                      onToggleSchoolPrograms={() => handleToggleSchoolPrograms(school.id)}
                       onSelect={() => setSelectedSchool(school)}
                       isSelected={selectedSchool?.id === school.id}
                     />
@@ -443,6 +442,18 @@ export default function MatchPage() {
                 <span className="rounded-md bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
                   {filteredPrograms.length}
                 </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  disabled={filteredPrograms.length === 0}
+                  onClick={handleToggleVisiblePrograms}
+                >
+                  {filteredPrograms.every((program) => addedPrograms.includes(program.id))
+                    ? "取消全选"
+                    : "全选当前列表"}
+                </Button>
                 {selectedSchool && (
                   <span className="hidden text-xs text-muted-foreground sm:inline">
                     当前院校：{selectedSchool.nameEn}

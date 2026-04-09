@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -32,7 +32,15 @@ const emptyEducation: Education = {
 };
 
 export function EducationForm({ data, onChange }: EducationFormProps) {
-  const [expandedIndex, setExpandedIndex] = useState<number | null>(data.length === 0 ? null : 0);
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const hasAutoExpanded = useRef(false);
+
+  useEffect(() => {
+    if (!hasAutoExpanded.current && data.length > 0) {
+      setExpandedIndex(0);
+      hasAutoExpanded.current = true;
+    }
+  }, [data.length]);
 
   const addEducation = () => {
     onChange([...data, { ...emptyEducation }]);

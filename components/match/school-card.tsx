@@ -1,9 +1,7 @@
 "use client";
 
-import { Trophy, LayoutList, MapPin, Plus, Check } from "lucide-react";
+import { Trophy, LayoutList, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SchoolLogoMark } from "@/components/match/school-logo-mark";
 import { cn } from "@/lib/utils";
 import type { School } from "@/lib/types";
@@ -17,9 +15,6 @@ const categoryCn: Record<School["category"], string> = {
 interface SchoolCardProps {
   school: School;
   programCount: number;
-  schoolProgramIds: string[];
-  addedProgramIds: string[];
-  onToggleSchoolPrograms: () => void;
   onSelect: () => void;
   isSelected?: boolean;
 }
@@ -27,27 +22,15 @@ interface SchoolCardProps {
 export function SchoolCard({
   school,
   programCount,
-  schoolProgramIds,
-  addedProgramIds,
-  onToggleSchoolPrograms,
   onSelect,
   isSelected,
 }: SchoolCardProps) {
-  const hasPrograms = schoolProgramIds.length > 0;
-  const allProgramsAdded =
-    hasPrograms && schoolProgramIds.every((id) => addedProgramIds.includes(id));
-  const someProgramsAdded = schoolProgramIds.some((id) => addedProgramIds.includes(id));
   const inv = isSelected;
-  const bulkProgramsLabel = allProgramsAdded
-    ? "从申请单移除此校全部项目"
-    : someProgramsAdded
-      ? "补全该校其余项目到申请单"
-      : "将该校全部匹配项目加入申请单";
 
   return (
     <div
       className={cn(
-        "flex min-h-[5.25rem] overflow-hidden rounded-lg border transition-colors",
+        "min-h-[5.25rem] overflow-hidden rounded-lg border transition-colors",
         inv
           ? "border-foreground bg-background text-foreground"
           : "border-border/80 bg-card/95 hover:border-border hover:bg-muted/25"
@@ -99,51 +82,10 @@ export function SchoolCard({
                 <LayoutList className={cn("h-4 w-4 shrink-0", inv ? "text-muted-foreground" : "text-muted-foreground")} />
                 <span className={inv ? "text-foreground" : "text-foreground/80"}>{programCount}</span>
               </span>
-              {someProgramsAdded && !allProgramsAdded && (
-                <>
-                  <span className={cn("h-3.5 w-px shrink-0", inv ? "bg-border" : "bg-border/80")} />
-                  <span className={inv ? "font-medium text-foreground/85" : "font-medium text-foreground/75"}>部分已加</span>
-                </>
-              )}
             </div>
           </div>
         </div>
       </button>
-
-      <div
-        className={cn(
-          "flex w-12 shrink-0 flex-col items-center justify-center border-l p-1.5",
-          inv ? "border-border/90 bg-muted/20" : "border-border/80 bg-muted/20"
-        )}
-      >
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "h-9 w-9 rounded-lg",
-                inv && "text-foreground hover:bg-muted/40 hover:text-foreground",
-                allProgramsAdded && !inv && "bg-muted text-foreground",
-                allProgramsAdded && inv && "bg-muted/40 text-foreground"
-              )}
-              disabled={!hasPrograms}
-              aria-label={bulkProgramsLabel}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onToggleSchoolPrograms();
-              }}
-            >
-              {allProgramsAdded ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="left" className="max-w-[240px]">
-            {bulkProgramsLabel}
-          </TooltipContent>
-        </Tooltip>
-      </div>
     </div>
   );
 }
