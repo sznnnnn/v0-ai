@@ -40,6 +40,9 @@ export function EducationForm({ data, onChange }: EducationFormProps) {
   };
 
   const removeEducation = (index: number) => {
+    if (!confirm("确认删除这段教育背景吗？")) {
+      return;
+    }
     onChange(data.filter((_, i) => i !== index));
     setExpandedIndex(null);
   };

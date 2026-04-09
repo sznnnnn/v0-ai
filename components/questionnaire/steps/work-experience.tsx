@@ -40,6 +40,9 @@ export function WorkExperienceForm({ data, onChange }: WorkExperienceFormProps) 
   };
 
   const removeExperience = (index: number) => {
+    if (!confirm("确认删除这段实习/工作经历吗？")) {
+      return;
+    }
     onChange(data.filter((_, i) => i !== index));
     setExpandedIndex(null);
   };

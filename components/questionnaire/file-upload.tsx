@@ -22,6 +22,7 @@ export function FileUpload({
   maxSize = 10,
 }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState<string>("");
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -53,6 +54,7 @@ export function FileUpload({
   );
 
   const handleFiles = (newFiles: File[]) => {
+    setFeedbackMessage("");
     const validFiles = newFiles.filter((file) => {
       const sizeInMB = file.size / (1024 * 1024);
       return sizeInMB <= maxSize;
@@ -60,6 +62,8 @@ export function FileUpload({
 
     const remainingSlots = maxFiles - files.length;
     const filesToAdd = validFiles.slice(0, remainingSlots);
+    const rejectedBySize = newFiles.length - validFiles.length;
+    const rejectedByCount = Math.max(validFiles.length - filesToAdd.length, 0);
 
     const uploadedFiles: UploadedFile[] = filesToAdd.map((file) => ({
       id: Math.random().toString(36).substr(2, 9),
@@ -70,10 +74,23 @@ export function FileUpload({
     }));
 
     onFilesChange([...files, ...uploadedFiles]);
+
+    if (rejectedBySize > 0 || rejectedByCount > 0) {
+      const parts: string[] = [];
+      if (rejectedBySize > 0) parts.push(`${rejectedBySize} 个文件超过 ${maxSize}MB`);
+      if (rejectedByCount > 0) parts.push(`${rejectedByCount} 个文件超出数量上限`);
+      setFeedbackMessage(`已忽略：${parts.join("，")}。`);
+    } else if (uploadedFiles.length > 0) {
+      setFeedbackMessage(`已添加 ${uploadedFiles.length} 个文件。`);
+    }
   };
 
   const removeFile = (id: string) => {
+    if (!confirm("确认删除这个文件吗？")) {
+      return;
+    }
     onFilesChange(files.filter((f) => f.id !== id));
+    setFeedbackMessage("文件已删除。");
   };
 
   const getFileIcon = (type: string) => {
@@ -139,6 +156,9 @@ export function FileUpload({
       </div>
 
       {/* File List */}
+      {feedbackMessage && (
+        <p className="text-xs text-muted-foreground">{feedbackMessage}</p>
+      )}
       {files.length > 0 && (
         <div className="space-y-2">
           {files.map((file) => {

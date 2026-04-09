@@ -117,6 +117,9 @@ export function ProgramCard({
                         className="h-8 w-8 shrink-0 rounded-md"
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (!confirm("确认从工作台移除该项目吗？")) {
+                            return;
+                          }
                           onRemove?.();
                         }}
                         aria-label="取消添加"

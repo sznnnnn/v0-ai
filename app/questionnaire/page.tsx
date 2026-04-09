@@ -28,11 +28,13 @@ import {
 
 export default function QuestionnairePage() {
   const router = useRouter();
-  const { data, isLoaded, saveData, setCurrentStep } = useQuestionnaire();
+  const { data, isLoaded, saveData, setCurrentStep, getCompletionStatus } = useQuestionnaire();
   const [showUploadPanel, setShowUploadPanel] = useState(false);
+  const [navigationHint, setNavigationHint] = useState("");
   const currentStep = data.currentStep;
   const totalSteps = 8;
-  const progress = Math.round((currentStep / totalSteps) * 100);
+  const completionStatus = useMemo(() => getCompletionStatus(), [getCompletionStatus]);
+  const progress = Math.round((completionStatus.completedSteps.length / totalSteps) * 100);
 
   const steps = useMemo(
     () => [
@@ -60,8 +62,12 @@ export default function QuestionnairePage() {
   );
 
   const handleGenerateMatch = useCallback(() => {
+    if (!completionStatus.canGenerateMatch) {
+      setNavigationHint("请先完成必填步骤：个人信息、教育背景。");
+      return;
+    }
     router.push("/match");
-  }, [router]);
+  }, [completionStatus.canGenerateMatch, router]);
 
   const updateData = useCallback(
     (field: keyof QuestionnaireData, value: unknown) => {
@@ -71,12 +77,17 @@ export default function QuestionnairePage() {
   );
 
   const handleNextStep = useCallback(() => {
+    setNavigationHint("");
     if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
       return;
     }
+    if (!completionStatus.canGenerateMatch) {
+      setNavigationHint("请先完成必填步骤：个人信息、教育背景。");
+      return;
+    }
     router.push("/match");
-  }, [currentStep, router, setCurrentStep, totalSteps]);
+  }, [completionStatus.canGenerateMatch, currentStep, router, setCurrentStep, totalSteps]);
 
   const handlePrevStep = useCallback(() => {
     if (currentStep > 1) {
@@ -171,22 +182,23 @@ export default function QuestionnairePage() {
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
-              size="icon"
-              className="h-8 w-8"
+              size="sm"
+              className="h-9 gap-1.5 px-3"
               onClick={() => setShowUploadPanel((v) => !v)}
               aria-label="上传材料"
-              title="上传材料"
             >
               <Paperclip className="h-3.5 w-3.5" />
+              <span className="text-xs">上传材料</span>
             </Button>
             <Button
               onClick={handleGenerateMatch}
-              size="icon"
-              className="h-8 w-8"
+              size="sm"
+              className="h-9 gap-1.5 px-3"
               aria-label="去匹配"
-              title="去匹配"
+              disabled={!completionStatus.canGenerateMatch}
             >
               <ArrowRight className="h-4 w-4" />
+              <span className="text-xs">去匹配</span>
             </Button>
           </div>
         </div>
@@ -229,6 +241,11 @@ export default function QuestionnairePage() {
                       <span className={`w-7 text-xs ${isCurrent ? "text-background/80" : "text-muted-foreground/70"}`}>{String(step.number).padStart(2, "0")}</span>
                       <span className={isCurrent ? "font-medium" : "font-normal"}>{step.title}</span>
                       {step.required && <span className={`text-xs ${isCurrent ? "text-background/80" : "text-muted-foreground/70"}`}>*</span>}
+                      {completionStatus.completedSteps.includes(step.number) && (
+                        <span className={`ml-auto text-[10px] ${isCurrent ? "text-background/80" : "text-muted-foreground/70"}`}>
+                          已完成
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -258,7 +275,7 @@ export default function QuestionnairePage() {
               </div>
               <div className="mt-3 border-t border-border/60 px-2 pt-3">
                 <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-                  <span>进度</span>
+                  <span>完成度</span>
                   <span>{progress}%</span>
                 </div>
                 <div className="h-1.5 rounded-full bg-muted">
@@ -282,6 +299,9 @@ export default function QuestionnairePage() {
         </div>
 
         <p className="mt-6 text-center text-xs text-muted-foreground/70">已自动保存</p>
+        {navigationHint && (
+          <p className="mt-2 text-center text-xs text-amber-600">{navigationHint}</p>
+        )}
       </main>
 
       <div className="sticky bottom-0 z-30 border-t border-border bg-background/85 px-6 py-3 backdrop-blur">

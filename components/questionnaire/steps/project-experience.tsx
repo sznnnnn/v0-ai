@@ -56,6 +56,9 @@ export function ProjectExperienceForm({ data, onChange }: ProjectExperienceFormP
   };
 
   const removeProject = (index: number) => {
+    if (!confirm("确认删除这个项目经历吗？")) {
+      return;
+    }
     onChange(data.filter((_, i) => i !== index));
     setExpandedIndex(null);
   };

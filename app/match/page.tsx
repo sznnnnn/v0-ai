@@ -67,7 +67,11 @@ function buildAnalysisSteps(data: QuestionnaireData): AnalysisStep[] {
 }
 
 export default function MatchPage() {
-  const { data: questionnaireData, isLoaded: isQuestionnaireLoaded } = useQuestionnaire();
+  const {
+    data: questionnaireData,
+    isLoaded: isQuestionnaireLoaded,
+    getCompletionStatus,
+  } = useQuestionnaire();
   const { result, isLoaded: isResultLoaded, saveResult } = useMatchResult();
 
   const [isGenerating, setIsGenerating] = useState(false);
@@ -83,7 +87,8 @@ export default function MatchPage() {
     generationTimersRef.current = [];
   }, []);
 
-  const runGeneration = useCallback(() => {
+  const runGeneration = useCallback((opts?: { instant?: boolean }) => {
+    const instant = opts?.instant ?? false;
     clearGenerationTimers();
     const steps = buildAnalysisSteps(questionnaireData);
     const stepDuration = 850;
@@ -91,18 +96,20 @@ export default function MatchPage() {
     setActiveStepIndex(0);
     setIsGenerating(true);
 
-    steps.forEach((_, index) => {
-      const timerId = window.setTimeout(() => {
-        setActiveStepIndex(index);
-      }, index * stepDuration);
-      generationTimersRef.current.push(timerId);
-    });
+    if (!instant) {
+      steps.forEach((_, index) => {
+        const timerId = window.setTimeout(() => {
+          setActiveStepIndex(index);
+        }, index * stepDuration);
+        generationTimersRef.current.push(timerId);
+      });
+    }
 
     const finishTimerId = window.setTimeout(() => {
       const newResult = generateMatchResult(questionnaireData);
       saveResult(newResult);
       setIsGenerating(false);
-    }, steps.length * stepDuration + 300);
+    }, instant ? 80 : steps.length * stepDuration + 300);
     generationTimersRef.current.push(finishTimerId);
   }, [clearGenerationTimers, questionnaireData, saveResult]);
 
@@ -152,6 +159,11 @@ export default function MatchPage() {
   const handleRegenerate = () => {
     runGeneration();
   };
+
+  const completionStatus = useMemo(
+    () => getCompletionStatus(),
+    [getCompletionStatus]
+  );
 
   const filteredSchools = useMemo(() => {
     if (!result) return [];
@@ -249,6 +261,19 @@ export default function MatchPage() {
                 );
               })}
             </div>
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => runGeneration({ instant: true })}
+              >
+                跳过动画
+              </Button>
+              <Button type="button" variant="ghost" size="sm" asChild>
+                <Link href="/questionnaire">返回问卷</Link>
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -271,12 +296,14 @@ export default function MatchPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
+                  size="sm"
+                  className="h-9 gap-1.5 px-3"
                   aria-label="重新匹配"
                   onClick={handleRegenerate}
+                  disabled={!completionStatus.canGenerateMatch}
                 >
                   <RefreshCw className="h-4 w-4" />
+                  <span className="text-xs">重新匹配</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">重新匹配</TooltipContent>
@@ -284,8 +311,9 @@ export default function MatchPage() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <Link href="/questionnaire">
-                  <Button variant="outline" size="icon" className="h-8 w-8" aria-label="返回问卷">
+                  <Button variant="outline" size="sm" className="h-9 gap-1.5 px-3" aria-label="返回问卷">
                     <ArrowLeft className="h-4 w-4" />
+                    <span className="text-xs">返回问卷</span>
                   </Button>
                 </Link>
               </TooltipTrigger>
@@ -294,8 +322,9 @@ export default function MatchPage() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <Link href="/workspace">
-                  <Button size="icon" className="h-8 w-8" aria-label="工作台">
+                  <Button size="sm" className="h-9 gap-1.5 px-3" aria-label="工作台">
                     <ArrowRight className="h-4 w-4" />
+                    <span className="text-xs">工作台</span>
                   </Button>
                 </Link>
               </TooltipTrigger>
@@ -311,6 +340,11 @@ export default function MatchPage() {
           addedPrograms.length > 0 && "pb-24"
         )}
       >
+        {!completionStatus.canGenerateMatch && (
+          <div className="mb-4 rounded-lg border border-amber-300/70 bg-amber-50/70 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200">
+            当前为草稿匹配视图：请先在问卷补齐个人信息与教育背景，再进行正式匹配。
+          </div>
+        )}
         <div className="grid gap-6 lg:grid-cols-[minmax(288px,320px)_1fr]">
           <aside className="space-y-4 lg:sticky lg:top-24 lg:h-fit">
             <div className="rounded-xl border border-border/80 bg-card/95 p-2.5">

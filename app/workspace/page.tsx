@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import { GuestBanner } from "@/components/questionnaire/guest-banner";
 import { SchoolLogoMark } from "@/components/match/school-logo-mark";
+import { SchoolRichInfo } from "@/components/match/school-rich-info";
 import { ProgramCard } from "@/components/match/program-card";
 import { WorkspaceBuddy } from "@/components/workspace/workspace-buddy";
 import { useMatchResult, useQuestionnaire } from "@/hooks/use-questionnaire";
@@ -108,7 +109,11 @@ function isApplicationOpen(deadline: string) {
 
 export default function WorkspacePage() {
   const { result } = useMatchResult();
-  const { data: questionnaireData, isLoaded: questionnaireLoaded } = useQuestionnaire();
+  const {
+    data: questionnaireData,
+    isLoaded: questionnaireLoaded,
+    getCompletionStatus,
+  } = useQuestionnaire();
   const [addedProgramIds, setAddedProgramIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [applications, setApplications] = useState<Record<string, ApplicationItem["status"]>>({});
@@ -360,8 +365,13 @@ export default function WorkspacePage() {
   }, [displayPrograms, applications]);
 
   const backgroundMaterialCount = questionnaireData.files.length;
-  const shouldPromptMoreBackgroundMaterials =
-    questionnaireLoaded && backgroundMaterialCount < 5;
+  const questionnaireCompletion = useMemo(
+    () => getCompletionStatus(),
+    [getCompletionStatus]
+  );
+  const questionnaireProgress = Math.round(
+    (questionnaireCompletion.completedSteps.length / 8) * 100
+  );
 
   const updateStatus = (programId: string, status: ApplicationItem["status"]) => {
     const updated = { ...applications, [programId]: status };
@@ -431,7 +441,7 @@ export default function WorkspacePage() {
             )}
           >
             <LayoutGrid className="h-4 w-4 shrink-0 opacity-70" />
-            <span className="flex-1 truncate">全部申请</span>
+            <span className="flex-1 truncate">仪表盘</span>
             {addedPrograms.length > 0 && (
               <span className="text-xs text-muted-foreground">{addedPrograms.length}</span>
             )}
@@ -618,7 +628,7 @@ export default function WorkspacePage() {
               <p className="truncate text-xs text-muted-foreground">
                 {selectedSchool
                   ? `${selectedSchool.name} · ${displayPrograms.length} 项`
-                  : "全部申请"}
+                  : "仪表盘"}
               </p>
             </div>
             <Link href="/" className="shrink-0">
@@ -638,7 +648,7 @@ export default function WorkspacePage() {
                         ? selectedProgramPair.program.nameEn
                         : selectedSchool
                           ? selectedSchool.nameEn
-                          : "全部申请"}
+                          : "仪表盘"}
                     </h1>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {selectedProgramPair ? (
@@ -948,18 +958,49 @@ export default function WorkspacePage() {
 
               {!selectedSchool && !selectedProgramPair && (
                 <section className="mb-8 space-y-5" aria-label="申请概览仪表盘">
-                  {shouldPromptMoreBackgroundMaterials ? (
-                    <Card className="gap-0 border-amber-300/70 bg-amber-50/70 py-0 shadow-none dark:border-amber-900/60 dark:bg-amber-950/20">
-                      <CardContent className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="text-sm text-amber-900 dark:text-amber-200">
-                          背景材料仅 {backgroundMaterialCount} 条，建议补到 5 条以上。
-                        </p>
-                        <Button size="sm" variant="outline" className="h-8 shrink-0" asChild>
-                          <Link href="/questionnaire">补充背景</Link>
-                        </Button>
+                  {questionnaireLoaded ? (
+                    <Card className="gap-0 border-border/80 py-0 shadow-none">
+                      <CardContent className="px-4 py-3">
+                        <div className="mb-2 flex items-center justify-between text-sm text-muted-foreground">
+                          <span>背景资料完成度</span>
+                          <span className="tabular-nums">{questionnaireProgress}%</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-muted">
+                          <div
+                            className="h-full rounded-full bg-foreground/80 transition-all duration-300"
+                            style={{ width: `${questionnaireProgress}%` }}
+                          />
+                        </div>
+                        {questionnaireCompletion.canGenerateMatch ? (
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            必填信息已完整，可继续更新背景提升匹配质量。
+                          </p>
+                        ) : (
+                          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-xs text-amber-700 dark:text-amber-300">
+                              还不能正式匹配：请先完成个人信息与教育背景。
+                            </p>
+                            <Button size="sm" variant="outline" className="h-8" asChild>
+                              <Link href="/questionnaire">继续完善</Link>
+                            </Button>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   ) : null}
+
+                  <div className="flex flex-wrap items-center gap-2 border-b border-border/60 pb-4">
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href="/match">
+                        选校清单
+                      </Link>
+                    </Button>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href="/questionnaire">
+                        我的背景
+                      </Link>
+                    </Button>
+                  </div>
 
                   {addedPrograms.length > 0 ? (
                     <section className="space-y-3" aria-label="概览指标">
@@ -981,8 +1022,7 @@ export default function WorkspacePage() {
                         <button
                           type="button"
                           onClick={() => {
-                            const firstSchool = schoolsInWorkspace[0];
-                            if (firstSchool) selectSchool(firstSchool.id);
+                            jumpToApplicationList();
                           }}
                           className="rounded-lg border border-border/70 bg-muted/[0.16] px-4 py-3.5 text-left transition-colors hover:bg-muted/[0.24]"
                         >
@@ -1009,41 +1049,40 @@ export default function WorkspacePage() {
                     </section>
                   ) : null}
 
-                  <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
-                    <Button variant="outline" size="sm" asChild>
-                      <Link href="/match">
-                        选校清单
-                      </Link>
-                    </Button>
-                    <Button variant="outline" size="sm" asChild>
-                      <Link href="/questionnaire">
-                        我的背景
-                      </Link>
-                    </Button>
-                  </div>
                 </section>
               )}
 
               {selectedSchool && !selectedProgramPair && (
-                <div className="mb-4 rounded-lg border border-border bg-card px-4 py-3">
-                  <div className="flex items-start gap-3">
-                    <SchoolLogoMark school={selectedSchool} size="row" rounded="md" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-foreground">{selectedSchool.nameEn}</p>
-                      <p className="truncate text-xs text-muted-foreground">{selectedSchool.name}</p>
-                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                        <Badge variant="outline" className="text-[11px]">
-                          QS #{selectedSchool.ranking}
-                        </Badge>
-                        <Badge variant="outline" className="text-[11px]">
-                          {selectedSchool.city} · {selectedSchool.country}
-                        </Badge>
-                        <Badge variant="outline" className="text-[11px]">
-                          {displayPrograms.length} 个项目
-                        </Badge>
+                <div className="mb-6 space-y-3">
+                  <div className="rounded-lg border border-border bg-card px-4 py-3">
+                    <div className="flex items-start gap-3">
+                      <SchoolLogoMark school={selectedSchool} size="row" rounded="md" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-foreground">{selectedSchool.nameEn}</p>
+                        <p className="truncate text-xs text-muted-foreground">{selectedSchool.name}</p>
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <Badge variant="outline" className="text-[11px]">
+                            QS #{selectedSchool.ranking}
+                          </Badge>
+                          <Badge variant="outline" className="text-[11px]">
+                            {selectedSchool.city} · {selectedSchool.country}
+                          </Badge>
+                          <Badge variant="outline" className="text-[11px]">
+                            {displayPrograms.length} 个项目
+                          </Badge>
+                        </div>
                       </div>
                     </div>
                   </div>
+                  {(selectedSchool.campusStyle || selectedSchool.locationAndSetting || selectedSchool.studentLife) && (
+                    <section className="rounded-lg border border-border bg-card px-4 py-3">
+                      <div className="mb-2 flex items-center gap-2">
+                        <BookOpen className="h-4 w-4 text-muted-foreground" aria-hidden />
+                        <h2 className="text-sm font-medium text-foreground">院校介绍</h2>
+                      </div>
+                      <SchoolRichInfo school={selectedSchool} />
+                    </section>
+                  )}
                 </div>
               )}
 
@@ -1348,8 +1387,8 @@ export default function WorkspacePage() {
                   工作台操作
                 </h3>
                 <ul className="list-inside list-disc space-y-2">
-                  <li>左侧「全部申请」与学校列表可切换视图；顶部搜索可过滤项目。</li>
-                  <li>「全部申请」主区为仪表盘：指标卡片与快速入口；列表在下方。</li>
+                  <li>左侧「仪表盘」与学校列表可切换视图；顶部搜索可过滤项目。</li>
+                  <li>「仪表盘」主区包含指标卡片与快速入口；列表在下方。</li>
                   <li>列表中可改申请状态；「写文书」进入草稿编辑，草稿保存在本机浏览器。</li>
                   <li>侧栏「我的文书」汇总有内容的草稿；返回本页或切换窗口后会自动刷新状态。</li>
                 </ul>

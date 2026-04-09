@@ -27,6 +27,9 @@ export function HonorsForm({ data, onChange }: HonorsFormProps) {
   };
 
   const removeHonor = (index: number) => {
+    if (!confirm("确认删除这个奖项吗？")) {
+      return;
+    }
     onChange(data.filter((_, i) => i !== index));
     setExpandedIndex(null);
   };

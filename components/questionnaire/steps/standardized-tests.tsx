@@ -13,6 +13,23 @@ interface StandardizedTestsFormProps {
 export function StandardizedTestsForm({ data, onChange }: StandardizedTestsFormProps) {
   const [activeTab, setActiveTab] = useState("toefl");
 
+  const clampInt = (value: string, min: number, max: number) => {
+    const digits = value.replace(/[^\d]/g, "");
+    if (!digits) return "";
+    const parsed = Number.parseInt(digits, 10);
+    if (Number.isNaN(parsed)) return "";
+    return String(Math.min(max, Math.max(min, parsed)));
+  };
+
+  const clampHalfStep = (value: string, min: number, max: number) => {
+    const cleaned = value.replace(/[^\d.]/g, "");
+    if (!cleaned) return "";
+    const parsed = Number.parseFloat(cleaned);
+    if (Number.isNaN(parsed)) return "";
+    const rounded = Math.round(parsed * 2) / 2;
+    return String(Math.min(max, Math.max(min, rounded)));
+  };
+
   const updateToefl = (field: string, value: string) => {
     onChange({
       ...data,
@@ -69,7 +86,8 @@ export function StandardizedTestsForm({ data, onChange }: StandardizedTestsFormP
                   type="text"
                   placeholder="120"
                   value={data.toefl?.total || ""}
-                  onChange={(e) => updateToefl("total", e.target.value)}
+                  onChange={(e) => updateToefl("total", clampInt(e.target.value, 0, 120))}
+                  inputMode="numeric"
                   className="w-full bg-transparent text-lg text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
                 />
               </div>
@@ -81,7 +99,8 @@ export function StandardizedTestsForm({ data, onChange }: StandardizedTestsFormP
                   type="text"
                   placeholder="30"
                   value={data.toefl?.reading || ""}
-                  onChange={(e) => updateToefl("reading", e.target.value)}
+                  onChange={(e) => updateToefl("reading", clampInt(e.target.value, 0, 30))}
+                  inputMode="numeric"
                   className="w-full bg-transparent text-lg text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
                 />
               </div>
@@ -93,7 +112,8 @@ export function StandardizedTestsForm({ data, onChange }: StandardizedTestsFormP
                   type="text"
                   placeholder="30"
                   value={data.toefl?.listening || ""}
-                  onChange={(e) => updateToefl("listening", e.target.value)}
+                  onChange={(e) => updateToefl("listening", clampInt(e.target.value, 0, 30))}
+                  inputMode="numeric"
                   className="w-full bg-transparent text-lg text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
                 />
               </div>
@@ -105,7 +125,8 @@ export function StandardizedTestsForm({ data, onChange }: StandardizedTestsFormP
                   type="text"
                   placeholder="30"
                   value={data.toefl?.speaking || ""}
-                  onChange={(e) => updateToefl("speaking", e.target.value)}
+                  onChange={(e) => updateToefl("speaking", clampInt(e.target.value, 0, 30))}
+                  inputMode="numeric"
                   className="w-full bg-transparent text-lg text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
                 />
               </div>
@@ -117,11 +138,13 @@ export function StandardizedTestsForm({ data, onChange }: StandardizedTestsFormP
                   type="text"
                   placeholder="30"
                   value={data.toefl?.writing || ""}
-                  onChange={(e) => updateToefl("writing", e.target.value)}
+                  onChange={(e) => updateToefl("writing", clampInt(e.target.value, 0, 30))}
+                  inputMode="numeric"
                   className="w-full bg-transparent text-lg text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
                 />
               </div>
             </div>
+            <p className="text-xs text-muted-foreground">TOEFL 范围：总分 0-120，单项 0-30。</p>
           </div>
         </TabsContent>
 
@@ -137,7 +160,8 @@ export function StandardizedTestsForm({ data, onChange }: StandardizedTestsFormP
                   type="text"
                   placeholder="9.0"
                   value={data.ielts?.overall || ""}
-                  onChange={(e) => updateIelts("overall", e.target.value)}
+                  onChange={(e) => updateIelts("overall", clampHalfStep(e.target.value, 0, 9))}
+                  inputMode="decimal"
                   className="w-full bg-transparent text-lg text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
                 />
               </div>
@@ -149,7 +173,8 @@ export function StandardizedTestsForm({ data, onChange }: StandardizedTestsFormP
                   type="text"
                   placeholder="9.0"
                   value={data.ielts?.reading || ""}
-                  onChange={(e) => updateIelts("reading", e.target.value)}
+                  onChange={(e) => updateIelts("reading", clampHalfStep(e.target.value, 0, 9))}
+                  inputMode="decimal"
                   className="w-full bg-transparent text-lg text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
                 />
               </div>
@@ -161,7 +186,8 @@ export function StandardizedTestsForm({ data, onChange }: StandardizedTestsFormP
                   type="text"
                   placeholder="9.0"
                   value={data.ielts?.listening || ""}
-                  onChange={(e) => updateIelts("listening", e.target.value)}
+                  onChange={(e) => updateIelts("listening", clampHalfStep(e.target.value, 0, 9))}
+                  inputMode="decimal"
                   className="w-full bg-transparent text-lg text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
                 />
               </div>
@@ -173,7 +199,8 @@ export function StandardizedTestsForm({ data, onChange }: StandardizedTestsFormP
                   type="text"
                   placeholder="9.0"
                   value={data.ielts?.speaking || ""}
-                  onChange={(e) => updateIelts("speaking", e.target.value)}
+                  onChange={(e) => updateIelts("speaking", clampHalfStep(e.target.value, 0, 9))}
+                  inputMode="decimal"
                   className="w-full bg-transparent text-lg text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
                 />
               </div>
@@ -185,11 +212,13 @@ export function StandardizedTestsForm({ data, onChange }: StandardizedTestsFormP
                   type="text"
                   placeholder="9.0"
                   value={data.ielts?.writing || ""}
-                  onChange={(e) => updateIelts("writing", e.target.value)}
+                  onChange={(e) => updateIelts("writing", clampHalfStep(e.target.value, 0, 9))}
+                  inputMode="decimal"
                   className="w-full bg-transparent text-lg text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
                 />
               </div>
             </div>
+            <p className="text-xs text-muted-foreground">IELTS 范围：0-9，按 0.5 分步进。</p>
           </div>
         </TabsContent>
 
@@ -205,7 +234,8 @@ export function StandardizedTestsForm({ data, onChange }: StandardizedTestsFormP
                   type="text"
                   placeholder="170"
                   value={data.gre?.verbal || ""}
-                  onChange={(e) => updateGre("verbal", e.target.value)}
+                  onChange={(e) => updateGre("verbal", clampInt(e.target.value, 130, 170))}
+                  inputMode="numeric"
                   className="w-full bg-transparent text-lg text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
                 />
               </div>
@@ -217,7 +247,8 @@ export function StandardizedTestsForm({ data, onChange }: StandardizedTestsFormP
                   type="text"
                   placeholder="170"
                   value={data.gre?.quantitative || ""}
-                  onChange={(e) => updateGre("quantitative", e.target.value)}
+                  onChange={(e) => updateGre("quantitative", clampInt(e.target.value, 130, 170))}
+                  inputMode="numeric"
                   className="w-full bg-transparent text-lg text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
                 />
               </div>
@@ -229,11 +260,13 @@ export function StandardizedTestsForm({ data, onChange }: StandardizedTestsFormP
                   type="text"
                   placeholder="6.0"
                   value={data.gre?.analyticalWriting || ""}
-                  onChange={(e) => updateGre("analyticalWriting", e.target.value)}
+                  onChange={(e) => updateGre("analyticalWriting", clampHalfStep(e.target.value, 0, 6))}
+                  inputMode="decimal"
                   className="w-full bg-transparent text-lg text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
                 />
               </div>
             </div>
+            <p className="text-xs text-muted-foreground">GRE 范围：Verbal/Quant 130-170，AWA 0-6（0.5 步进）。</p>
           </div>
         </TabsContent>
 
@@ -249,7 +282,8 @@ export function StandardizedTestsForm({ data, onChange }: StandardizedTestsFormP
                   type="text"
                   placeholder="800"
                   value={data.gmat?.total || ""}
-                  onChange={(e) => updateGmat("total", e.target.value)}
+                  onChange={(e) => updateGmat("total", clampInt(e.target.value, 200, 800))}
+                  inputMode="numeric"
                   className="w-full bg-transparent text-lg text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
                 />
               </div>
@@ -261,7 +295,8 @@ export function StandardizedTestsForm({ data, onChange }: StandardizedTestsFormP
                   type="text"
                   placeholder="60"
                   value={data.gmat?.verbal || ""}
-                  onChange={(e) => updateGmat("verbal", e.target.value)}
+                  onChange={(e) => updateGmat("verbal", clampInt(e.target.value, 0, 60))}
+                  inputMode="numeric"
                   className="w-full bg-transparent text-lg text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
                 />
               </div>
@@ -273,7 +308,8 @@ export function StandardizedTestsForm({ data, onChange }: StandardizedTestsFormP
                   type="text"
                   placeholder="60"
                   value={data.gmat?.quantitative || ""}
-                  onChange={(e) => updateGmat("quantitative", e.target.value)}
+                  onChange={(e) => updateGmat("quantitative", clampInt(e.target.value, 0, 60))}
+                  inputMode="numeric"
                   className="w-full bg-transparent text-lg text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
                 />
               </div>
@@ -285,7 +321,8 @@ export function StandardizedTestsForm({ data, onChange }: StandardizedTestsFormP
                   type="text"
                   placeholder="8"
                   value={data.gmat?.integratedReasoning || ""}
-                  onChange={(e) => updateGmat("integratedReasoning", e.target.value)}
+                  onChange={(e) => updateGmat("integratedReasoning", clampInt(e.target.value, 1, 8))}
+                  inputMode="numeric"
                   className="w-full bg-transparent text-lg text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
                 />
               </div>
@@ -297,11 +334,13 @@ export function StandardizedTestsForm({ data, onChange }: StandardizedTestsFormP
                   type="text"
                   placeholder="6.0"
                   value={data.gmat?.analyticalWriting || ""}
-                  onChange={(e) => updateGmat("analyticalWriting", e.target.value)}
+                  onChange={(e) => updateGmat("analyticalWriting", clampHalfStep(e.target.value, 0, 6))}
+                  inputMode="decimal"
                   className="w-full bg-transparent text-lg text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
                 />
               </div>
             </div>
+            <p className="text-xs text-muted-foreground">GMAT 范围：总分 200-800，Verbal/Quant 0-60，IR 1-8，AWA 0-6（0.5 步进）。</p>
           </div>
         </TabsContent>
       </Tabs>

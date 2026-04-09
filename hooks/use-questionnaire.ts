@@ -74,15 +74,59 @@ export function useQuestionnaire() {
     setData(initialQuestionnaireData);
   }, []);
 
-  // 检查是否可以生成匹配结果（基础信息和项目经历）
-  const canGenerateMatch = useCallback(() => {
-    const hasPersonalInfo = data.personalInfo.fullName &&
-      data.personalInfo.intendedMajor &&
-      data.personalInfo.targetSemester &&
-      data.personalInfo.targetCountry.length > 0;
-    const hasEducation = data.education.length > 0;
-    return hasPersonalInfo && hasEducation;
-  }, [data]);
+  const requiredStepNumbers = [1, 2] as const;
+
+  const hasRequiredPersonalInfo = useCallback(() => {
+    return Boolean(
+      data.personalInfo.fullName.trim() &&
+      data.personalInfo.intendedMajor.trim() &&
+      data.personalInfo.targetSemester.trim() &&
+      data.personalInfo.targetCountry.length > 0
+    );
+  }, [data.personalInfo]);
+
+  const hasRequiredEducation = useCallback(() => {
+    return data.education.some((edu) =>
+      Boolean(edu.school.trim() && edu.degree.trim() && edu.major.trim())
+    );
+  }, [data.education]);
+
+  // 按真实填写状态计算完成度，供问卷页与工作台共用同一口径
+  const getCompletionStatus = useCallback(() => {
+    const completedSteps = new Set<number>();
+    if (hasRequiredPersonalInfo()) {
+      completedSteps.add(1);
+    }
+    if (hasRequiredEducation()) {
+      completedSteps.add(2);
+    }
+
+    const hasAnyTestScore = [
+      ...Object.values(data.tests.toefl ?? {}),
+      ...Object.values(data.tests.ielts ?? {}),
+      ...Object.values(data.tests.gre ?? {}),
+      ...Object.values(data.tests.gmat ?? {}),
+    ].some((value) => value.trim());
+    if (hasAnyTestScore) completedSteps.add(3);
+    if (data.workExperience.length > 0) completedSteps.add(4);
+    if (data.projects.length > 0) completedSteps.add(5);
+    if (data.honors.length > 0) completedSteps.add(6);
+    if (data.skills.length > 0) completedSteps.add(7);
+    if (
+      data.personalInfo.futurePlan.trim() ||
+      data.personalInfo.motivationNote.trim() ||
+      data.personalInfo.otherApplicationNotes.trim()
+    ) {
+      completedSteps.add(8);
+    }
+
+    const missingRequiredSteps = requiredStepNumbers.filter((step) => !completedSteps.has(step));
+    return {
+      completedSteps: Array.from(completedSteps).sort((a, b) => a - b),
+      missingRequiredSteps,
+      canGenerateMatch: missingRequiredSteps.length === 0,
+    };
+  }, [data, hasRequiredEducation, hasRequiredPersonalInfo]);
 
   return {
     data,
@@ -91,7 +135,8 @@ export function useQuestionnaire() {
     setCurrentStep,
     markStepComplete,
     resetData,
-    canGenerateMatch,
+    requiredStepNumbers,
+    getCompletionStatus,
   };
 }
 
