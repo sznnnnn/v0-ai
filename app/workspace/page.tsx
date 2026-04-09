@@ -26,8 +26,6 @@ import {
   Search,
   MoreVertical,
   Trash2,
-  Calendar,
-  Clock,
   GraduationCap,
   FileText,
   LayoutGrid,
@@ -35,17 +33,18 @@ import {
   Menu,
   PenLine,
   FileStack,
-  Globe2,
   BookOpen,
   MessageSquare,
   LayoutDashboard,
   AlertTriangle,
+  File,
+  MapPin,
+  ExternalLink,
+  ChevronRight,
 } from "lucide-react";
 import { GuestBanner } from "@/components/questionnaire/guest-banner";
-import { SchoolRichInfo } from "@/components/match/school-rich-info";
-import { SchoolNotionCover } from "@/components/match/school-notion-cover";
 import { SchoolLogoMark } from "@/components/match/school-logo-mark";
-import { WorkspaceApplicationsMap } from "@/components/workspace/workspace-applications-map";
+import { ProgramCard } from "@/components/match/program-card";
 import { WorkspaceBuddy } from "@/components/workspace/workspace-buddy";
 import { useMatchResult, useQuestionnaire } from "@/hooks/use-questionnaire";
 import type { Program, School } from "@/lib/types";
@@ -58,6 +57,7 @@ import {
   listProgramDraftSummaries,
   type DocumentDraftKind,
 } from "@/lib/document-drafts";
+import { getProgramEnrichment } from "@/lib/program-enrichment";
 
 interface ApplicationItem {
   program: Program;
@@ -95,6 +95,17 @@ function formatDraftUpdated(iso: string) {
   }
 }
 
+function isApplicationOpen(deadline: string) {
+  const v = deadline.trim();
+  if (!v) return false;
+  if (/rolling/i.test(v)) return true;
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return false;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return d >= today;
+}
+
 export default function WorkspacePage() {
   const { result } = useMatchResult();
   const { data: questionnaireData, isLoaded: questionnaireLoaded } = useQuestionnaire();
@@ -108,6 +119,14 @@ export default function WorkspacePage() {
   const [draftStorageReady, setDraftStorageReady] = useState(false);
   const [showAllSchoolDrafts, setShowAllSchoolDrafts] = useState(false);
   const [usageGuideOpen, setUsageGuideOpen] = useState(false);
+  const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
+  const [liveMessage, setLiveMessage] = useState("");
+  const [expandedSections, setExpandedSections] = useState({
+    overview: false,
+    orientation: false,
+    highlights: false,
+    curriculum: false,
+  });
 
   useEffect(() => {
     setDraftStorageReady(true);
@@ -135,6 +154,15 @@ export default function WorkspacePage() {
       document.removeEventListener("visibilitychange", bump);
     };
   }, []);
+
+  useEffect(() => {
+    setExpandedSections({
+      overview: false,
+      orientation: false,
+      highlights: false,
+      curriculum: false,
+    });
+  }, [selectedProgramId]);
 
   const programIdsWithDrafts = useMemo(() => {
     if (!draftStorageReady) return new Set<string>();
@@ -234,32 +262,23 @@ export default function WorkspacePage() {
     return Object.values(groups);
   }, [displayPrograms]);
 
-  /** 「全部申请」地图：按当前列表（含搜索筛选）聚合同校坐标 */
-  const workspaceMapPins = useMemo(() => {
-    const m = new Map<string, { school: School; count: number }>();
-    for (const { school } of displayPrograms) {
-      if (school.lat == null || school.lng == null) continue;
-      const cur = m.get(school.id);
-      if (cur) cur.count += 1;
-      else m.set(school.id, { school, count: 1 });
-    }
-    return Array.from(m.values()).map(({ school, count }) => ({
-      schoolId: school.id,
-      name: school.name,
-      nameEn: school.nameEn,
-      city: school.city,
-      country: school.country,
-      lat: school.lat!,
-      lng: school.lng!,
-      programCount: count,
-      logo: school.logo,
-    }));
-  }, [displayPrograms]);
-
   const schoolsInWorkspace = useMemo(() => {
     const map = new Map<string, School>();
     addedPrograms.forEach(({ school }) => map.set(school.id, school));
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
+  }, [addedPrograms]);
+
+  const programsBySchool = useMemo(() => {
+    const grouped = new Map<string, Program[]>();
+    for (const { program, school } of addedPrograms) {
+      const list = grouped.get(school.id) ?? [];
+      list.push(program);
+      grouped.set(school.id, list);
+    }
+    for (const [, list] of grouped) {
+      list.sort((a, b) => a.nameEn.localeCompare(b.nameEn));
+    }
+    return grouped;
   }, [addedPrograms]);
 
   const selectedSchool = useMemo(() => {
@@ -302,6 +321,20 @@ export default function WorkspacePage() {
   }, [schoolDraftSheets, showAllSchoolDrafts]);
   const schoolDraftSheetsNeedExpand = schoolDraftSheets.length > schoolDraftSheetsLimit;
 
+  const selectedProgramPair = useMemo(() => {
+    if (!result || !selectedProgramId) return null;
+    const program = result.programs.find((p) => p.id === selectedProgramId);
+    if (!program) return null;
+    const school = result.schools.find((s) => s.id === program.schoolId);
+    if (!school) return null;
+    return { program, school };
+  }, [result, selectedProgramId]);
+
+  const selectedProgramExtra = useMemo(() => {
+    if (!selectedProgramPair) return null;
+    return getProgramEnrichment(selectedProgramPair.program, selectedProgramPair.school);
+  }, [selectedProgramPair]);
+
   /** 与当前主列表一致（含搜索筛选）的仪表盘数字 */
   const dashboardStats = useMemo(() => {
     const statusCounts = {
@@ -334,6 +367,7 @@ export default function WorkspacePage() {
     const updated = { ...applications, [programId]: status };
     setApplications(updated);
     localStorage.setItem("edumatch_application_status", JSON.stringify(updated));
+    setLiveMessage(`申请状态已更新为${statusConfig[status].label}`);
   };
 
   const removeProgram = (programId: string) => {
@@ -343,7 +377,31 @@ export default function WorkspacePage() {
   };
 
   const selectSchool = (id: string | null) => {
+    setSelectedProgramId(null);
     setSelectedSchoolId(id);
+  };
+
+  const jumpToApplicationList = () => {
+    if (typeof window === "undefined") return;
+    const node = document.getElementById("workspace-application-list");
+    if (!node) return;
+    node.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const openProgramDetail = (program: Program) => {
+    setSelectedProgramId(program.id);
+    setLiveMessage(`已打开项目详情：${program.nameEn}`);
+  };
+
+  const toggleDetailSection = (section: keyof typeof expandedSections) => {
+    setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const jumpToDetailSection = (id: string) => {
+    if (typeof window === "undefined") return;
+    const node = document.getElementById(id);
+    if (!node) return;
+    node.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const sidebarBody = (opts: { onPick?: () => void }) => (
@@ -391,25 +449,47 @@ export default function WorkspacePage() {
               {schoolsInWorkspace.map((school) => {
                 const active = selectedSchoolId === school.id;
                 const count = addedPrograms.filter((p) => p.school.id === school.id).length;
+                const schoolPrograms = programsBySchool.get(school.id) ?? [];
                 return (
-                  <button
-                    key={school.id}
-                    type="button"
-                    onClick={() => {
-                      selectSchool(active ? null : school.id);
-                      opts.onPick?.();
-                    }}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
-                      active
-                        ? "bg-muted/80 text-foreground"
-                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  <div key={school.id} className="space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        selectSchool(active ? null : school.id);
+                        opts.onPick?.();
+                      }}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                        active
+                          ? "bg-muted/80 text-foreground"
+                          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                      )}
+                    >
+                      <SchoolLogoMark school={school} size="sidebar" rounded="md" />
+                      <span className="min-w-0 flex-1 truncate">{school.name}</span>
+                      <span className="text-xs text-muted-foreground">{count}</span>
+                    </button>
+
+                    {active && schoolPrograms.length > 0 && (
+                      <div className="ml-8 space-y-0.5 border-l border-border/60 pl-2">
+                        {schoolPrograms.map((program) => (
+                          <button
+                            key={program.id}
+                            type="button"
+                            onClick={() => {
+                              openProgramDetail(program);
+                              opts.onPick?.();
+                            }}
+                            className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                            title={program.nameEn}
+                          >
+                            <File className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                            <span className="min-w-0 flex-1 truncate">{program.nameEn}</span>
+                          </button>
+                        ))}
+                      </div>
                     )}
-                  >
-                    <SchoolLogoMark school={school} size="sidebar" rounded="md" />
-                    <span className="min-w-0 flex-1 truncate">{school.name}</span>
-                    <span className="text-xs text-muted-foreground">{count}</span>
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -484,6 +564,9 @@ export default function WorkspacePage() {
   return (
     <div className="flex min-h-dvh flex-col bg-background">
       <GuestBanner />
+      <p className="sr-only" role="status" aria-live="polite">
+        {liveMessage}
+      </p>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Desktop sidebar — Notion-like */}
@@ -546,15 +629,24 @@ export default function WorkspacePage() {
           </header>
 
           <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 md:py-8">
-            <div className={cn("mx-auto", selectedSchool ? "max-w-4xl" : "max-w-6xl")}>
+            <div className={cn("mx-auto", selectedSchool || selectedProgramPair ? "max-w-4xl" : "max-w-6xl")}>
               <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-4">
                   <div className="min-w-0 flex-1">
                     <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-                      {selectedSchool ? selectedSchool.nameEn : "全部申请"}
+                      {selectedProgramPair
+                        ? selectedProgramPair.program.nameEn
+                        : selectedSchool
+                          ? selectedSchool.nameEn
+                          : "全部申请"}
                     </h1>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      {selectedSchool ? (
+                      {selectedProgramPair ? (
+                        <>
+                          {selectedProgramPair.school.nameEn} · {selectedProgramPair.program.degree} ·{" "}
+                          {selectedProgramPair.program.duration}
+                        </>
+                      ) : selectedSchool ? (
                         <>
                           {selectedSchool.name} · {displayPrograms.length} 个项目
                           {searchQuery ? ` · 已按搜索筛选` : ""}
@@ -567,25 +659,303 @@ export default function WorkspacePage() {
                       )}
                     </p>
                   </div>
-                  {!selectedSchool ? <WorkspaceBuddy className="pt-0.5" /> : null}
+                  {!selectedSchool && !selectedProgramPair ? <WorkspaceBuddy className="pt-0.5" /> : null}
                 </div>
 
                 <div className="h-9 w-9 shrink-0" aria-hidden />
               </div>
 
-              {!selectedSchool && (
+              {selectedProgramPair && (
+                <section className="space-y-4">
+                  <nav className="mb-1" aria-label="项目层级导航">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                      aria-label="返回项目列表"
+                      onClick={() => {
+                        setSelectedProgramId(null);
+                        setLiveMessage("已返回项目列表");
+                      }}
+                    >
+                      <ChevronRight className="h-3.5 w-3.5 rotate-180" />
+                      <span>申请列表</span>
+                      <span className="text-muted-foreground/70">/</span>
+                      <span>{selectedProgramPair.school.nameEn}</span>
+                      <span className="text-muted-foreground/70">/</span>
+                      <span className="max-w-[24ch] truncate">{selectedProgramPair.program.nameEn}</span>
+                    </Button>
+                  </nav>
+
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-border/80 bg-card/95 px-4 py-4 sm:px-5">
+                      <div className="flex items-start gap-3">
+                        <SchoolLogoMark school={selectedProgramPair.school} size="row" rounded="md" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-base font-semibold text-foreground sm:text-lg">
+                            {selectedProgramPair.program.nameEn}
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {selectedProgramPair.school.nameEn} · {selectedProgramPair.program.degree} ·{" "}
+                            {selectedProgramPair.program.duration}
+                          </p>
+                        </div>
+                        <Button size="sm" className="shrink-0" asChild>
+                          <Link href={`/workspace/write/${selectedProgramPair.program.id}`}>写文书</Link>
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-2 rounded-xl border border-border/80 bg-muted/[0.08] px-4 py-3 text-xs sm:grid-cols-2 lg:grid-cols-4 sm:px-5">
+                      <div className="rounded-md border border-border/70 bg-background px-3 py-2" aria-label="学制信息">
+                        <p className="text-muted-foreground">学制</p>
+                        <p className="mt-1 text-sm font-semibold text-foreground">{selectedProgramPair.program.duration}</p>
+                      </div>
+                      <div className="rounded-md border border-border/70 bg-background px-3 py-2" aria-label="申请截止日期">
+                        <p className="text-muted-foreground">申请截止</p>
+                        <p className="mt-1 text-sm font-semibold text-foreground">{selectedProgramPair.program.deadline}</p>
+                      </div>
+                      <div className="rounded-md border border-border/70 bg-background px-3 py-2" aria-label="项目学费">
+                        <p className="text-muted-foreground">学费</p>
+                        <p className="mt-1 text-sm font-semibold text-foreground">{selectedProgramPair.program.tuition}</p>
+                      </div>
+                      <div className="rounded-md border border-border/70 bg-background px-3 py-2" aria-label="所在城市与国家">
+                        <p className="text-muted-foreground">地点</p>
+                        <p className="mt-1 text-sm font-semibold text-foreground">
+                          {selectedProgramPair.school.city} · {selectedProgramPair.school.country}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
+                      <div className="space-y-3">
+                        <section id="section-facts" className="rounded-md border border-border/70 bg-muted/[0.06]">
+                          <div className="border-b border-border/70 px-3 py-2">
+                            <p className="text-xs font-medium text-muted-foreground">项目信息</p>
+                          </div>
+                          <div className="divide-y divide-border/70 text-sm">
+                            <div className="flex items-center justify-between px-3 py-2.5">
+                              <span className="text-muted-foreground">院系</span>
+                              <span className="font-medium text-foreground">{selectedProgramPair.program.department}</span>
+                            </div>
+                            <div className="flex items-center justify-between px-3 py-2.5">
+                              <span className="text-muted-foreground">类型</span>
+                              <span className="font-medium text-foreground">{selectedProgramPair.program.degree}</span>
+                            </div>
+                            <div className="flex items-center justify-between px-3 py-2.5">
+                              <span className="text-muted-foreground">QS 排名</span>
+                              <span className="font-medium text-foreground">#{selectedProgramPair.school.ranking}</span>
+                            </div>
+                          </div>
+                        </section>
+
+                        <section id="section-overview" className="rounded-md border border-border/70 p-3">
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between gap-2 text-left"
+                            aria-expanded={expandedSections.overview}
+                            aria-controls="section-overview-content"
+                            onClick={() => toggleDetailSection("overview")}
+                          >
+                            <p className="text-xs font-medium text-muted-foreground">项目简介</p>
+                            <ChevronRight className={cn("h-4 w-4 text-muted-foreground transition-transform", expandedSections.overview && "rotate-90")} />
+                          </button>
+                          <p
+                            id="section-overview-content"
+                            className={cn(
+                              "pt-2 text-sm leading-relaxed text-foreground/90",
+                              expandedSections.overview ? "" : "line-clamp-3"
+                            )}
+                          >
+                            {selectedProgramPair.program.description}
+                          </p>
+                        </section>
+
+                        {selectedProgramExtra && (
+                          <>
+                            <section id="section-orientation" className="rounded-md border border-border/70 p-3">
+                              <button
+                                type="button"
+                                className="flex w-full items-center justify-between gap-2 text-left"
+                                aria-expanded={expandedSections.orientation}
+                                aria-controls="section-orientation-content"
+                                onClick={() => toggleDetailSection("orientation")}
+                              >
+                                <p className="text-xs font-medium text-muted-foreground">培养定位</p>
+                                <ChevronRight className={cn("h-4 w-4 text-muted-foreground transition-transform", expandedSections.orientation && "rotate-90")} />
+                              </button>
+                              <p
+                                id="section-orientation-content"
+                                className={cn(
+                                  "pt-2 text-sm leading-relaxed text-foreground/90",
+                                  expandedSections.orientation ? "" : "line-clamp-2"
+                                )}
+                              >
+                                {selectedProgramExtra.orientation}
+                              </p>
+                            </section>
+
+                            <section id="section-highlights" className="rounded-md border border-border/70 p-3">
+                              <button
+                                type="button"
+                                className="flex w-full items-center justify-between gap-2 text-left"
+                                aria-expanded={expandedSections.highlights}
+                                aria-controls="section-highlights-content"
+                                onClick={() => toggleDetailSection("highlights")}
+                              >
+                                <p className="text-xs font-medium text-muted-foreground">项目亮点</p>
+                                <ChevronRight className={cn("h-4 w-4 text-muted-foreground transition-transform", expandedSections.highlights && "rotate-90")} />
+                              </button>
+                              <ul
+                                id="section-highlights-content"
+                                className={cn(
+                                  "space-y-1.5 pt-2",
+                                  expandedSections.highlights ? "" : "max-h-20 overflow-hidden"
+                                )}
+                              >
+                                {selectedProgramExtra.highlights.map((item, idx) => (
+                                  <li key={idx} className="text-sm text-foreground/90">
+                                    - {item}
+                                  </li>
+                                ))}
+                              </ul>
+                            </section>
+
+                            <section id="section-curriculum" className="rounded-md border border-border/70 p-3">
+                              <button
+                                type="button"
+                                className="flex w-full items-center justify-between gap-2 text-left"
+                                aria-expanded={expandedSections.curriculum}
+                                aria-controls="section-curriculum-content"
+                                onClick={() => toggleDetailSection("curriculum")}
+                              >
+                                <p className="text-xs font-medium text-muted-foreground">课程方向</p>
+                                <ChevronRight className={cn("h-4 w-4 text-muted-foreground transition-transform", expandedSections.curriculum && "rotate-90")} />
+                              </button>
+                              <div
+                                id="section-curriculum-content"
+                                className={cn(
+                                  "flex flex-wrap gap-1.5 pt-2",
+                                  expandedSections.curriculum ? "" : "max-h-14 overflow-hidden"
+                                )}
+                              >
+                                {selectedProgramExtra.curriculum.map((item, idx) => (
+                                  <span key={idx} className="rounded-full bg-muted px-2.5 py-1 text-xs text-foreground/90">
+                                    {item}
+                                  </span>
+                                ))}
+                              </div>
+                            </section>
+                          </>
+                        )}
+                      </div>
+
+                      <aside className="space-y-3">
+                        <div className="space-y-1 rounded-md border border-border/70 p-3">
+                          <p className="text-xs font-medium text-muted-foreground">快速定位</p>
+                          <button
+                            type="button"
+                            className="block text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                            onClick={() => jumpToDetailSection("section-facts")}
+                          >
+                            项目信息
+                          </button>
+                          <button
+                            type="button"
+                            className="block text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                            onClick={() => jumpToDetailSection("section-overview")}
+                          >
+                            项目简介
+                          </button>
+                          {selectedProgramExtra && (
+                            <>
+                              <button
+                                type="button"
+                                className="block text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                                onClick={() => jumpToDetailSection("section-orientation")}
+                              >
+                                培养定位
+                              </button>
+                              <button
+                                type="button"
+                                className="block text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                                onClick={() => jumpToDetailSection("section-highlights")}
+                              >
+                                项目亮点
+                              </button>
+                            </>
+                          )}
+                        </div>
+
+                        <div className="space-y-2 rounded-md border border-border/70 p-3">
+                          <p className="text-xs font-medium text-muted-foreground">申请要求</p>
+                          {selectedProgramPair.program.requirements.map((req, idx) => (
+                            <div key={idx} className="rounded-full bg-muted px-2.5 py-1 text-xs text-foreground/90">
+                              {req}
+                            </div>
+                          ))}
+                        </div>
+
+                        {selectedProgramExtra && (
+                          <>
+                            <div className="space-y-2 rounded-md border border-border/70 p-3">
+                              <p className="text-xs font-medium text-muted-foreground">申请材料清单</p>
+                              <ul className="space-y-1.5">
+                                {selectedProgramExtra.applicationChecklist.map((item, idx) => (
+                                  <li key={idx} className="text-xs text-foreground/85">
+                                    - {item}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+
+                            <div className="space-y-2 rounded-md border border-border/70 p-3">
+                              <p className="text-xs font-medium text-muted-foreground">时间线</p>
+                              <ul className="space-y-1.5">
+                                {selectedProgramExtra.timeline.map((item, idx) => (
+                                  <li key={idx} className="text-xs text-foreground/85">
+                                    {idx + 1}. {item}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </>
+                        )}
+
+                        {selectedProgramExtra && selectedProgramExtra.links.length > 0 && (
+                          <div className="space-y-2 rounded-md border border-border/70 p-3">
+                            <p className="text-xs font-medium text-muted-foreground">外部信息</p>
+                            <div className="space-y-1.5">
+                              {selectedProgramExtra.links.map((item) => (
+                                <a
+                                  key={item.url}
+                                  href={item.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="block text-xs text-foreground/85 underline decoration-border underline-offset-2 hover:decoration-foreground"
+                                >
+                                  <span>{item.label}</span>
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </aside>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {!selectedSchool && !selectedProgramPair && (
                 <section className="mb-8 space-y-5" aria-label="申请概览仪表盘">
                   {shouldPromptMoreBackgroundMaterials ? (
                     <Card className="gap-0 border-amber-300/70 bg-amber-50/70 py-0 shadow-none dark:border-amber-900/60 dark:bg-amber-950/20">
                       <CardContent className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-start gap-2">
-                          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
-                          <p className="text-sm text-amber-900 dark:text-amber-200">
-                            当前背景材料仅 {backgroundMaterialCount} 条，建议至少补充到 5 条，以便完善匹配与文书素材。
-                          </p>
-                        </div>
+                        <p className="text-sm text-amber-900 dark:text-amber-200">
+                          背景材料仅 {backgroundMaterialCount} 条，建议补到 5 条以上。
+                        </p>
                         <Button size="sm" variant="outline" className="h-8 shrink-0" asChild>
-                          <Link href="/questionnaire">去我的背景补充</Link>
+                          <Link href="/questionnaire">补充背景</Link>
                         </Button>
                       </CardContent>
                     </Card>
@@ -598,12 +968,29 @@ export default function WorkspacePage() {
                         <h2 className="text-sm font-medium text-foreground">概览指标</h2>
                       </div>
                       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-                        <div className="rounded-lg border border-border/70 bg-muted/[0.16] px-4 py-3.5">
+                        <button
+                          type="button"
+                          onClick={() => jumpToApplicationList()}
+                          className="rounded-lg border border-border/70 bg-muted/[0.16] px-4 py-3.5 text-left transition-colors hover:bg-muted/[0.24]"
+                        >
+                          <span className="text-[11px] font-medium tracking-wide text-muted-foreground">项目</span>
+                          <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
+                            {dashboardStats.programs}
+                          </p>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const firstSchool = schoolsInWorkspace[0];
+                            if (firstSchool) selectSchool(firstSchool.id);
+                          }}
+                          className="rounded-lg border border-border/70 bg-muted/[0.16] px-4 py-3.5 text-left transition-colors hover:bg-muted/[0.24]"
+                        >
                           <span className="text-[11px] font-medium tracking-wide text-muted-foreground">院校</span>
                           <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
                             {dashboardStats.schools}
                           </p>
-                        </div>
+                        </button>
                         <div className="rounded-lg border border-border/70 bg-muted/[0.16] px-4 py-3.5">
                           <span className="text-[11px] font-medium tracking-wide text-muted-foreground">待申请</span>
                           <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
@@ -612,89 +999,55 @@ export default function WorkspacePage() {
                         </div>
                         <div className="rounded-lg border border-border/70 bg-muted/[0.16] px-4 py-3.5">
                           <span className="text-[11px] font-medium tracking-wide text-muted-foreground">
-                            准备 / 已递交
+                            进行中
                           </span>
                           <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
                             {dashboardStats.active}
-                          </p>
-                        </div>
-                        <div className="rounded-lg border border-border/70 bg-muted/[0.16] px-4 py-3.5">
-                          <span className="text-[11px] font-medium tracking-wide text-muted-foreground">
-                            已有结果
-                          </span>
-                          <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
-                            {dashboardStats.outcome}
                           </p>
                         </div>
                       </div>
                     </section>
                   ) : null}
 
-                  <div className="grid gap-6 border-t border-border/60 pt-5 lg:grid-cols-12 lg:items-start">
-                    <section
-                      className={cn("space-y-3.5", workspaceMapPins.length > 0 ? "lg:col-span-5" : "lg:col-span-12")}
-                    >
-                      <div className="flex items-center gap-2 border-b border-border/50 pb-2.5">
-                        <LayoutDashboard className="h-4 w-4 text-muted-foreground" aria-hidden />
-                        <h2 className="text-sm font-medium text-foreground">快捷操作</h2>
-                      </div>
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <Button
-                          variant="outline"
-                          className="h-16 justify-start gap-3 rounded-lg border-border/70 bg-background/70 px-4 text-sm font-medium shadow-none transition-colors hover:bg-muted/35"
-                          asChild
-                        >
-                          <Link href="/match">
-                            <ListChecks className="h-4.5 w-4.5 opacity-80" aria-hidden />
-                            选校清单
-                          </Link>
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="h-16 justify-start gap-3 rounded-lg border-border/70 bg-background/70 px-4 text-sm font-medium shadow-none transition-colors hover:bg-muted/35"
-                          asChild
-                        >
-                          <Link href="/questionnaire">
-                            <FileText className="h-4.5 w-4.5 opacity-80" aria-hidden />
-                            我的背景
-                          </Link>
-                        </Button>
-                      </div>
-                    </section>
-
-                    {workspaceMapPins.length > 0 ? (
-                      <section className="space-y-3.5 lg:col-span-7">
-                        <div className="flex items-center gap-2 border-b border-border/50 pb-2.5">
-                          <Globe2 className="h-4 w-4 text-muted-foreground" aria-hidden />
-                          <h2 className="text-sm font-medium text-foreground">地图分布</h2>
-                        </div>
-                        <div className="rounded-lg border border-border/60 bg-muted/[0.08] px-3 py-3">
-                          <WorkspaceApplicationsMap
-                            pins={workspaceMapPins}
-                            onSelectSchool={(id) => selectSchool(id)}
-                            className="mx-auto max-w-[280px] shadow-none"
-                          />
-                        </div>
-                      </section>
-                    ) : null}
+                  <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href="/match">
+                        选校清单
+                      </Link>
+                    </Button>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href="/questionnaire">
+                        我的背景
+                      </Link>
+                    </Button>
                   </div>
                 </section>
               )}
 
-              {selectedSchool && (
-                <div className="mb-6 overflow-hidden rounded-lg border border-border bg-card">
-                  <SchoolNotionCover school={selectedSchool} />
-                  {(selectedSchool.campusStyle ||
-                    selectedSchool.locationAndSetting ||
-                    selectedSchool.studentLife) && (
-                    <div className="border-t border-border/80 px-4 py-4 sm:px-5 sm:py-5">
-                      <SchoolRichInfo school={selectedSchool} className="text-sm" />
+              {selectedSchool && !selectedProgramPair && (
+                <div className="mb-4 rounded-lg border border-border bg-card px-4 py-3">
+                  <div className="flex items-start gap-3">
+                    <SchoolLogoMark school={selectedSchool} size="row" rounded="md" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-foreground">{selectedSchool.nameEn}</p>
+                      <p className="truncate text-xs text-muted-foreground">{selectedSchool.name}</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <Badge variant="outline" className="text-[11px]">
+                          QS #{selectedSchool.ranking}
+                        </Badge>
+                        <Badge variant="outline" className="text-[11px]">
+                          {selectedSchool.city} · {selectedSchool.country}
+                        </Badge>
+                        <Badge variant="outline" className="text-[11px]">
+                          {displayPrograms.length} 个项目
+                        </Badge>
+                      </div>
                     </div>
-                  )}
+                  </div>
                 </div>
               )}
 
-              {selectedSchool && (
+              {selectedSchool && !selectedProgramPair && (
                 <div className="mb-6">
                   <div className="mb-3 flex items-center gap-2">
                     <FileText className="h-4 w-4 text-muted-foreground" aria-hidden />
@@ -775,14 +1128,15 @@ export default function WorkspacePage() {
                 </div>
               )}
 
-              {!selectedSchool && addedPrograms.length > 0 && (
-                <div className="mb-4 flex items-center gap-2">
+              {!selectedSchool && !selectedProgramPair && addedPrograms.length > 0 && (
+                <div id="workspace-application-list" className="mb-4 flex items-center gap-2">
                   <LayoutDashboard className="h-4 w-4 text-muted-foreground" aria-hidden />
                   <h2 className="text-sm font-medium text-foreground">申请列表</h2>
                 </div>
               )}
 
-              {addedPrograms.length === 0 ? (
+              {!selectedProgramPair &&
+              (addedPrograms.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border p-12 text-center">
                   <GraduationCap className="mx-auto mb-4 h-14 w-14 text-muted-foreground" />
                   <h2 className="mb-2 text-lg font-semibold text-foreground">还没有添加申请项目</h2>
@@ -821,106 +1175,78 @@ export default function WorkspacePage() {
                         {programs.map((program) => {
                           const status = applications[program.id] || "todo";
                           const statusInfo = statusConfig[status];
+                          const useDetailedCard = selectedSchoolId === school.id;
+                          const showOpenDeadline = isApplicationOpen(program.deadline);
 
                           return (
                             <div
                               key={program.id}
-                              className="flex flex-col gap-3 p-4 transition-colors hover:bg-muted/15 sm:flex-row sm:items-center sm:justify-between"
+                              className={cn(
+                                "p-3.5 sm:p-4",
+                                useDetailedCard
+                                  ? "space-y-3"
+                                  : "flex flex-col gap-3 transition-colors hover:bg-muted/15 sm:flex-row sm:items-center sm:justify-between"
+                              )}
                             >
-                              <div className="min-w-0 flex-1">
-                                <div className="mb-1 flex flex-wrap items-center gap-2">
-                                  <h4 className="font-medium text-foreground">{program.nameEn}</h4>
-                                  <Badge variant="outline" className={cn("font-normal", statusInfo.color)}>
-                                    {statusInfo.label}
-                                  </Badge>
+                              {useDetailedCard ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openProgramDetail(program)}
+                                  className="block w-full px-1 py-1.5 text-left transition-colors hover:bg-muted/[0.08]"
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                                      {program.nameEn}
+                                    </p>
+                                    <Badge variant="outline" className={cn("font-normal", statusInfo.color)}>
+                                      {statusInfo.label}
+                                    </Badge>
+                                  </div>
+                                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                                    <span>{program.degree}</span>
+                                    <span aria-hidden>·</span>
+                                    <span>{program.duration}</span>
+                                    <span aria-hidden>·</span>
+                                    <span>{program.deadline}</span>
+                                  </div>
+                                  {programIdsWithDrafts.has(program.id) && (
+                                    <p className="mt-1.5 text-xs text-muted-foreground">已保存草稿</p>
+                                  )}
+                                </button>
+                              ) : (
+                                <div className="min-w-0 flex-1">
+                                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                                    <h4 className="font-medium text-foreground">{program.nameEn}</h4>
+                                    <Badge variant="outline" className={cn("font-normal", statusInfo.color)}>
+                                      {statusInfo.label}
+                                    </Badge>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">
+                                    {program.degree} · {program.duration} · {program.tuition}
+                                  </p>
+                                  {showOpenDeadline && (
+                                    <p className="mt-1.5 inline-flex rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/35 dark:text-amber-200">
+                                      截止 {program.deadline}
+                                    </p>
+                                  )}
                                 </div>
-                                <div className="mt-1 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-                                  <span>{program.degree}</span>
-                                  <span className="flex items-center gap-1">
-                                    <Clock className="h-3.5 w-3.5" />
-                                    {program.duration}
-                                  </span>
-                                  <span className="flex items-center gap-1">
-                                    <Calendar className="h-3.5 w-3.5" />
-                                    {program.deadline}
-                                  </span>
-                                </div>
-                              </div>
+                              )}
 
-                              <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                              <div className={cn("flex shrink-0 flex-wrap items-center gap-1.5", useDetailedCard && "hidden")}>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <Button size="icon" className="h-9 w-9" asChild>
-                                      <Link
-                                        href={`/workspace/write/${program.id}`}
-                                        aria-label="写文书"
-                                      >
-                                        <PenLine className="h-4 w-4" />
-                                      </Link>
+                                    <Button
+                                      variant="outline"
+                                      size="icon"
+                                      className="h-9 w-9"
+                                      aria-label="查看项目"
+                                      onClick={() => openProgramDetail(program)}
+                                    >
+                                      <ChevronRight className="h-4 w-4" />
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent side="bottom">写文书</TooltipContent>
+                                  <TooltipContent side="bottom">查看项目</TooltipContent>
                                 </Tooltip>
-                                {programIdsWithDrafts.has(program.id) && (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <span className="inline-flex h-9 w-9 cursor-default items-center justify-center text-muted-foreground">
-                                        <FileStack className="h-4 w-4 opacity-80" aria-hidden />
-                                        <span className="sr-only">已保存草稿</span>
-                                      </span>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="bottom">已保存草稿</TooltipContent>
-                                  </Tooltip>
-                                )}
-                                <DropdownMenu>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <DropdownMenuTrigger asChild>
-                                        <Button
-                                          variant="outline"
-                                          size="icon"
-                                          className="h-9 w-9"
-                                          aria-label="申请状态"
-                                        >
-                                          <ListChecks className="h-4 w-4" />
-                                        </Button>
-                                      </DropdownMenuTrigger>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="bottom">申请状态</TooltipContent>
-                                  </Tooltip>
-                                  <DropdownMenuContent align="end">
-                                    {Object.entries(statusConfig).map(([key, value]) => (
-                                      <DropdownMenuItem
-                                        key={key}
-                                        onClick={() => updateStatus(program.id, key as ApplicationItem["status"])}
-                                      >
-                                        {value.label}
-                                      </DropdownMenuItem>
-                                    ))}
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-
-                                <DropdownMenu>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="更多">
-                                          <MoreVertical className="h-4 w-4" />
-                                        </Button>
-                                      </DropdownMenuTrigger>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="bottom">更多</TooltipContent>
-                                  </Tooltip>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem
-                                      className="text-destructive"
-                                      onClick={() => removeProgram(program.id)}
-                                    >
-                                      <Trash2 className="mr-2 h-4 w-4" />
-                                      移除
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
                               </div>
                             </div>
                           );
@@ -930,7 +1256,7 @@ export default function WorkspacePage() {
                     );
                   })}
                 </div>
-              )}
+              ))}
             </div>
           </main>
         </div>
@@ -1023,7 +1349,7 @@ export default function WorkspacePage() {
                 </h3>
                 <ul className="list-inside list-disc space-y-2">
                   <li>左侧「全部申请」与学校列表可切换视图；顶部搜索可过滤项目。</li>
-                  <li>「全部申请」主区为仪表盘：指标卡片、快捷操作与地图；列表在下方。</li>
+                  <li>「全部申请」主区为仪表盘：指标卡片与快速入口；列表在下方。</li>
                   <li>列表中可改申请状态；「写文书」进入草稿编辑，草稿保存在本机浏览器。</li>
                   <li>侧栏「我的文书」汇总有内容的草稿；返回本页或切换窗口后会自动刷新状态。</li>
                 </ul>

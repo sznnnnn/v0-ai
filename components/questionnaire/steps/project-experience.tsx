@@ -12,10 +12,28 @@ interface ProjectExperienceFormProps {
 }
 
 const starTips = {
-  situation: "项目背景：这个项目是为了解决什么问题？面向什么用户？",
-  task: "你的角色：你在项目中担任什么角色？负责哪些部分？",
-  action: "具体工作：你使用了什么技术/方法？如何完成任务？",
-  result: "项目成果：项目最终效果如何？有什么量化数据或反馈？",
+  situation:
+    "项目背景：这个项目是为了解决什么问题？面向什么用户？例如：为校内新生制作留学信息服务，减少信息分散。",
+  task: "你的角色：你在项目中担任什么角色？负责哪些部分？例如：负责选题、资料梳理和内容发布。",
+  action:
+    "具体工作：你使用了什么技术/方法？如何完成任务？例如：搜集网上 vlog、访谈学长学姐、整理问卷并迭代内容结构。",
+  result:
+    "项目成果：项目最终效果如何？有什么量化数据或反馈？例如：发布 12 篇内容、累计阅读 1.8w、问卷满意度 92%。",
+};
+
+const buildProjectPreview = (project: ProjectExperience) => {
+  const summary =
+    project.action.trim() ||
+    project.task.trim() ||
+    project.result.trim() ||
+    project.situation.trim() ||
+    "";
+
+  if (!summary) {
+    return "点击展开填写更具体的项目内容（如：搜集网上 vlog、访谈用户、复盘数据）";
+  }
+
+  return summary.length > 56 ? `${summary.slice(0, 56)}...` : summary;
 };
 
 export function ProjectExperienceForm({ data, onChange }: ProjectExperienceFormProps) {
@@ -100,7 +118,10 @@ export function ProjectExperienceForm({ data, onChange }: ProjectExperienceFormP
                       {proj.name || "未填写项目名称"}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {proj.role || "点击展开填写"}
+                      {proj.role || "未填写角色"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground/90 leading-relaxed">
+                      {buildProjectPreview(proj)}
                     </p>
                   </div>
                 </div>

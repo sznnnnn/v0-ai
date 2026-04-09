@@ -32,6 +32,8 @@ interface ProgramCardProps {
   onAdd?: () => void;
   onRemove?: () => void;
   showSchoolInHeader?: boolean;
+  showSelectionAction?: boolean;
+  onCardClick?: () => void;
 }
 
 export function ProgramCard({
@@ -41,14 +43,30 @@ export function ProgramCard({
   onAdd,
   onRemove,
   showSchoolInHeader = true,
+  showSelectionAction = true,
+  onCardClick,
 }: ProgramCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const deadlineShort = program.deadline.split("-").slice(1).join("/");
 
   return (
     <div
+      role={onCardClick ? "button" : undefined}
+      tabIndex={onCardClick ? 0 : undefined}
+      onClick={onCardClick}
+      onKeyDown={
+        onCardClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onCardClick();
+              }
+            }
+          : undefined
+      }
       className={cn(
         "flex overflow-hidden rounded-xl transition-colors",
+        onCardClick && "cursor-pointer",
         isAdded
           ? "border-2 border-foreground/45 bg-background"
           : "border border-border/80 bg-card/95 hover:border-border hover:bg-muted/25"
@@ -88,39 +106,46 @@ export function ProgramCard({
               <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{program.department}</p>
             </div>
             <div className="flex shrink-0 flex-wrap items-start justify-end gap-1.5">
-              {isAdded ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="default"
-                      size="icon"
-                      className="h-8 w-8 shrink-0 rounded-md"
-                      onClick={onRemove}
-                      aria-label="取消添加"
-                    >
-                      <Check className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">取消添加</TooltipContent>
-                </Tooltip>
-              ) : (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8 shrink-0 rounded-md border-border/80 bg-background"
-                      onClick={onAdd}
-                      aria-label="添加到工作台"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">添加到工作台</TooltipContent>
-                </Tooltip>
-              )}
+              {showSelectionAction &&
+                (isAdded ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="default"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 rounded-md"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemove?.();
+                        }}
+                        aria-label="取消添加"
+                      >
+                        <Check className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">取消添加</TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 rounded-md border-border/80 bg-background"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onAdd?.();
+                        }}
+                        aria-label="添加到工作台"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">添加到工作台</TooltipContent>
+                  </Tooltip>
+                ))}
               {showSchoolInHeader && (
                 <SchoolLogoMark
                   school={school}
@@ -189,7 +214,10 @@ export function ProgramCard({
             <TooltipTrigger asChild>
               <button
                 type="button"
-                onClick={() => setIsExpanded(!isExpanded)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsExpanded(!isExpanded);
+                }}
                 aria-expanded={isExpanded}
                 aria-label={isExpanded ? "收起详情" : "展开详情"}
                 className={cn(
