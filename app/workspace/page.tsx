@@ -40,7 +40,9 @@ import {
   File,
   MapPin,
   ExternalLink,
+  ChevronDown,
   ChevronRight,
+  Check,
   User,
   Briefcase,
   FolderGit2,
@@ -89,18 +91,20 @@ const statusConfig = {
   },
   rejected: {
     label: "已拒绝",
-    color: "border-transparent bg-[#FFF7E8] text-[#FF7D00]",
+    color: "border-transparent bg-[#FFFCE8] text-[#F7BA1E]",
   },
 };
 
 const notionTagPalette = [
   "border-transparent bg-[#E8F7FF] text-[#3491FA]", // Blue
+  "border-transparent bg-[#FFFCE8] text-[#F7BA1E]", // Yellow
   "border-transparent bg-[#FFF7E8] text-[#FF7D00]", // Orange
   "border-transparent bg-[#E8FFEA] text-[#00B42A]", // Green
   "border-transparent bg-[#F5E8FF] text-[#722ED1]", // Purple
 ];
 
 const getNotionTagClass = (index: number) => notionTagPalette[index % notionTagPalette.length];
+const statusOptions = Object.keys(statusConfig) as Array<keyof typeof statusConfig>;
 
 type SchoolDraftSheetItem = {
   programId: string;
@@ -443,6 +447,51 @@ export default function WorkspacePage() {
   const openProgramDetail = (program: Program) => {
     setSelectedProgramId(program.id);
     setLiveMessage(`已打开项目详情：${program.nameEn}`);
+  };
+
+  const renderStatusMenu = (
+    programId: string,
+    status: keyof typeof statusConfig,
+    compact?: boolean
+  ) => {
+    const current = statusConfig[status];
+    return (
+      <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(
+            "h-8 gap-1.5 px-2",
+            compact && "h-7 px-1.5"
+          )}
+          aria-label="修改申请状态"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", current.color)}>
+            {current.label}
+          </span>
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {statusOptions.map((option) => {
+          const active = option === status;
+          return (
+            <DropdownMenuItem
+              key={option}
+              onClick={() => updateStatus(programId, option)}
+              className={cn("flex items-center justify-between gap-2", active && "font-medium")}
+            >
+              <span>{statusConfig[option].label}</span>
+              {active ? <Check className="h-3.5 w-3.5" /> : null}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+    );
   };
 
   const toggleDetailSection = (section: keyof typeof expandedSections) => {
@@ -811,6 +860,10 @@ export default function WorkspacePage() {
                           </p>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
+                          {renderStatusMenu(
+                            selectedProgramPair.program.id,
+                            (applications[selectedProgramPair.program.id] || "todo") as keyof typeof statusConfig
+                          )}
                           {selectedProgramExtra?.links?.[0]?.url ? (
                             <Button
                               size="sm"
@@ -821,12 +874,16 @@ export default function WorkspacePage() {
                                 target="_blank"
                                 rel="noreferrer"
                               >
+                                <ExternalLink className="h-3.5 w-3.5" />
                                 项目链接
                               </a>
                             </Button>
                           ) : null}
                           <Button size="sm" className="shrink-0" asChild>
-                            <Link href={`/workspace/write/${selectedProgramPair.program.id}`}>写文书</Link>
+                            <Link href={`/workspace/write/${selectedProgramPair.program.id}`}>
+                              <PenLine className="h-3.5 w-3.5" />
+                              写文书
+                            </Link>
                           </Button>
                         </div>
                       </div>
@@ -970,7 +1027,7 @@ export default function WorkspacePage() {
                                     key={idx}
                                     className={cn(
                                       "rounded-full px-2.5 py-1 text-xs",
-                                      getNotionTagClass(idx)
+                                      "border-transparent bg-[#E8F7FF] text-[#3491FA]"
                                     )}
                                   >
                                     {item}
@@ -990,7 +1047,7 @@ export default function WorkspacePage() {
                                   key={idx}
                                   className={cn(
                                     "rounded-full px-2.5 py-1 text-xs",
-                                    getNotionTagClass(idx + 2)
+                                    "border-transparent bg-[#E8F7FF] text-[#3491FA]"
                                   )}
                                 >
                                   {req}
@@ -1134,16 +1191,30 @@ export default function WorkspacePage() {
                   <div className="flex justify-end gap-2">
                     {isBackgroundEditing ? (
                       <>
-                        <Button size="sm" variant="outline" onClick={cancelBackgroundEdit}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-[#3491FA]/40 text-[#3491FA] hover:bg-[#E8F7FF]"
+                          onClick={cancelBackgroundEdit}
+                        >
                           取消
                         </Button>
-                        <Button size="sm" onClick={saveBackgroundEdit}>
+                        <Button
+                          size="sm"
+                          className="bg-[#2378D9] text-white hover:bg-[#2378D9]"
+                          onClick={saveBackgroundEdit}
+                        >
                           保存
                         </Button>
                       </>
                     ) : (
-                      <Button size="sm" variant="outline" onClick={() => setIsBackgroundEditing(true)}>
-                        编辑我的背景
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-[#3491FA]/40 text-[#3491FA] hover:bg-[#E8F7FF]"
+                        onClick={() => setIsBackgroundEditing(true)}
+                      >
+                        编辑
                       </Button>
                     )}
                   </div>
@@ -1232,7 +1303,7 @@ export default function WorkspacePage() {
                         <p className="text-sm text-muted-foreground">未填</p>
                       ) : (
                         (isBackgroundEditing ? backgroundDraft?.workExperience : questionnaireData.workExperience)?.map((work, index) => (
-                          <article key={work.id} className="rounded-lg border border-border/70 bg-zinc-50 p-3.5">
+                          <article key={work.id} className="rounded-lg border border-border/70 bg-zinc-50/50 p-3.5">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               {isBackgroundEditing ? (
                                 <div className="grid w-full gap-2 sm:grid-cols-2">
@@ -1266,7 +1337,7 @@ export default function WorkspacePage() {
                                   <p className="text-sm font-semibold text-foreground">
                                     {(work.company || "未填公司")} · {(work.position || "未填岗位")}
                                   </p>
-                                  <span className="rounded-md border border-border/70 bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
+                                  <span className="rounded-md border border-transparent bg-[#E8F7FF] px-2 py-0.5 text-[11px] text-[#3491FA]">
                                     {work.startDate || "未知开始"} - {work.isCurrent ? "至今" : (work.endDate || "未知结束")}
                                   </span>
                                 </>
@@ -1307,7 +1378,7 @@ export default function WorkspacePage() {
                         <p className="text-sm text-muted-foreground">未填</p>
                       ) : (
                         (isBackgroundEditing ? backgroundDraft?.projects : questionnaireData.projects)?.map((proj, index) => (
-                          <article key={proj.id} className="rounded-lg border border-border/70 bg-zinc-50 p-3.5">
+                          <article key={proj.id} className="rounded-lg border border-border/70 bg-zinc-50/50 p-3.5">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               {isBackgroundEditing ? (
                                 <div className="grid w-full gap-2 sm:grid-cols-2">
@@ -1341,7 +1412,7 @@ export default function WorkspacePage() {
                                   <p className="text-sm font-semibold text-foreground">
                                     {(proj.name || "未填项目")} · {(proj.role || "未填角色")}
                                   </p>
-                                  <span className="rounded-md border border-border/70 bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
+                                  <span className="rounded-md border border-transparent bg-[#E8F7FF] px-2 py-0.5 text-[11px] text-[#3491FA]">
                                     {proj.startDate || "未知开始"} - {(proj.endDate || "未知结束")}
                                   </span>
                                 </>
@@ -1383,19 +1454,19 @@ export default function WorkspacePage() {
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
                           <Badge
                             variant="outline"
-                            className={cn("text-[11px]", "border-transparent bg-[#E8F3FF] text-[#4080FF]")}
+                            className={cn("text-[11px]", "border-transparent bg-[#E8F7FF] text-[#3491FA]")}
                           >
                             QS #{selectedSchool.ranking}
                           </Badge>
                           <Badge
                             variant="outline"
-                            className={cn("text-[11px]", "border-transparent bg-[#BEDAFF] text-[#165DFF]")}
+                            className={cn("text-[11px]", "border-transparent bg-[#E8F7FF] text-[#3491FA]")}
                           >
                             {selectedSchool.city} · {selectedSchool.country}
                           </Badge>
                           <Badge
                             variant="outline"
-                            className={cn("text-[11px]", "border-transparent bg-[#E8DEEE] text-[#492F5B]")}
+                            className={cn("text-[11px]", "border-transparent bg-[#F5E8FF] text-[#722ED1]")}
                           >
                             {displayPrograms.length} 个项目
                           </Badge>
@@ -1557,11 +1628,12 @@ export default function WorkspacePage() {
                               )}
                             >
                               {useDetailedCard ? (
-                                <button
-                                  type="button"
-                                  onClick={() => openProgramDetail(program)}
-                                  className="block w-full px-1 py-1.5 text-left transition-colors hover:bg-zinc-50"
-                                >
+                                <div className="space-y-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => openProgramDetail(program)}
+                                    className="block w-full px-1 py-1.5 text-left transition-colors hover:bg-zinc-50"
+                                  >
                                   <div className="flex items-start justify-between gap-2">
                                     <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
                                       {program.nameEn}
@@ -1580,7 +1652,8 @@ export default function WorkspacePage() {
                                   {programIdsWithDrafts.has(program.id) && (
                                     <p className="mt-1.5 text-xs text-muted-foreground">已保存草稿</p>
                                   )}
-                                </button>
+                                  </button>
+                                </div>
                               ) : (
                                 <div className="min-w-0 flex-1">
                                   <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -1604,8 +1677,9 @@ export default function WorkspacePage() {
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Button
+                                      variant="ghost"
                                       size="icon"
-                                      className="h-9 w-9 rounded-xl shadow-sm"
+                                      className="h-9 w-9 rounded-xl shadow-none"
                                       aria-label="查看项目"
                                       onClick={() => openProgramDetail(program)}
                                     >
