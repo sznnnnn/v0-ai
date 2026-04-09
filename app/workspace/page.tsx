@@ -71,12 +71,36 @@ interface ApplicationItem {
 }
 
 const statusConfig = {
-  todo: { label: "待申请", color: "bg-muted text-foreground" },
-  "in-progress": { label: "准备中", color: "bg-muted text-foreground" },
-  submitted: { label: "已提交", color: "bg-muted text-foreground" },
-  accepted: { label: "已录取", color: "bg-muted text-foreground" },
-  rejected: { label: "已拒绝", color: "bg-muted text-foreground" },
+  todo: {
+    label: "待申请",
+    color: "border-transparent bg-[#F5E8FF] text-[#722ED1]",
+  },
+  "in-progress": {
+    label: "准备中",
+    color: "border-transparent bg-[#FFF7E8] text-[#FF7D00]",
+  },
+  submitted: {
+    label: "已提交",
+    color: "border-transparent bg-[#E8F7FF] text-[#3491FA]",
+  },
+  accepted: {
+    label: "已录取",
+    color: "border-transparent bg-[#E8FFEA] text-[#00B42A]",
+  },
+  rejected: {
+    label: "已拒绝",
+    color: "border-transparent bg-[#FFF7E8] text-[#FF7D00]",
+  },
 };
+
+const notionTagPalette = [
+  "border-transparent bg-[#E8F7FF] text-[#3491FA]", // Blue
+  "border-transparent bg-[#FFF7E8] text-[#FF7D00]", // Orange
+  "border-transparent bg-[#E8FFEA] text-[#00B42A]", // Green
+  "border-transparent bg-[#F5E8FF] text-[#722ED1]", // Purple
+];
+
+const getNotionTagClass = (index: number) => notionTagPalette[index % notionTagPalette.length];
 
 type SchoolDraftSheetItem = {
   programId: string;
@@ -523,8 +547,8 @@ export default function WorkspacePage() {
             className={cn(
               "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
               selectedSchoolId == null && activeView === "dashboard"
-                ? "bg-muted/80 text-foreground"
-                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                ? "bg-[rgba(55,53,47,0.12)] text-foreground"
+                : "text-muted-foreground hover:bg-[rgba(55,53,47,0.08)] hover:text-foreground"
             )}
           >
             <LayoutGrid className="h-4 w-4 shrink-0 opacity-70" />
@@ -542,8 +566,8 @@ export default function WorkspacePage() {
             className={cn(
               "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
               activeView === "background"
-                ? "bg-muted/80 text-foreground"
-                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                ? "bg-[rgba(55,53,47,0.12)] text-foreground"
+                : "text-muted-foreground hover:bg-[rgba(55,53,47,0.08)] hover:text-foreground"
             )}
           >
             <FileText className="h-4 w-4 shrink-0 opacity-70" />
@@ -574,8 +598,8 @@ export default function WorkspacePage() {
                       className={cn(
                         "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
                         active
-                          ? "bg-muted/80 text-foreground"
-                          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                          ? "bg-[rgba(55,53,47,0.12)] text-foreground"
+                          : "text-muted-foreground hover:bg-[rgba(55,53,47,0.08)] hover:text-foreground"
                       )}
                     >
                       <SchoolLogoMark school={school} size="sidebar" rounded="md" />
@@ -625,7 +649,7 @@ export default function WorkspacePage() {
                     <Link
                       href={`/workspace/write/${d.programId}`}
                       onClick={() => opts.onPick?.()}
-                      className="flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                      className="flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-muted-foreground transition-colors duration-150 ease-in-out hover:bg-[rgba(55,53,47,0.08)] hover:text-foreground"
                       aria-label={labelForDraftProgram(d.programId)}
                       title={labelForDraftProgram(d.programId)}
                     >
@@ -649,7 +673,7 @@ export default function WorkspacePage() {
   );
 
   const sidebarFooter = (opts: { onPick?: () => void }) => (
-    <div className="border-t border-border/60 bg-muted/10 px-3 py-3">
+    <div className="border-t border-border/60 bg-[#FBFBFA] px-3 py-3">
       <div className="flex flex-col gap-1">
         <button
           type="button"
@@ -657,14 +681,14 @@ export default function WorkspacePage() {
             setUsageGuideOpen(true);
             opts.onPick?.();
           }}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors duration-150 ease-in-out hover:bg-[rgba(55,53,47,0.08)] hover:text-foreground"
         >
           <BookOpen className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
           <span>使用说明</span>
         </button>
         <a
           href="mailto:?subject=EduMatch%20%E7%94%A8%E6%88%B7%E5%8F%8D%E9%A6%88"
-          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors duration-150 ease-in-out hover:bg-[rgba(55,53,47,0.08)] hover:text-foreground"
           onClick={() => opts.onPick?.()}
         >
           <MessageSquare className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
@@ -675,7 +699,7 @@ export default function WorkspacePage() {
   );
 
   return (
-    <div className="flex min-h-dvh flex-col bg-background">
+    <div className="flex min-h-dvh flex-col bg-white">
       <GuestBanner />
       <p className="sr-only" role="status" aria-live="polite">
         {liveMessage}
@@ -683,7 +707,7 @@ export default function WorkspacePage() {
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Desktop sidebar — Notion-like */}
-        <aside className="hidden min-h-0 w-[260px] shrink-0 flex-col border-r border-border bg-muted/20 md:flex">
+        <aside className="hidden min-h-0 w-[260px] shrink-0 flex-col border-r border-border/80 bg-[#FBFBFA] md:flex">
           <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border/60 px-4">
             <Link href="/" className="flex min-w-0 items-center gap-2">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary">
@@ -715,7 +739,7 @@ export default function WorkspacePage() {
         </aside>
 
         {/* Main */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-white">
           <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4 md:hidden">
             <Button
               variant="ghost"
@@ -774,7 +798,7 @@ export default function WorkspacePage() {
                   </nav>
 
                   <div className="space-y-4">
-                    <div className="rounded-xl border border-border/80 bg-card/95 px-4 py-4 sm:px-5">
+                    <div className="rounded-xl border border-border/80 bg-white px-4 py-4 sm:px-5">
                       <div className="flex items-start gap-3">
                         <SchoolLogoMark school={selectedProgramPair.school} size="row" rounded="md" />
                         <div className="min-w-0 flex-1">
@@ -790,7 +814,6 @@ export default function WorkspacePage() {
                           {selectedProgramExtra?.links?.[0]?.url ? (
                             <Button
                               size="sm"
-                              className="bg-black text-white hover:bg-black/90 dark:bg-black dark:text-white dark:hover:bg-black/85"
                               asChild
                             >
                               <a
@@ -809,7 +832,7 @@ export default function WorkspacePage() {
                       </div>
                     </div>
 
-                    <div className="grid gap-2 rounded-xl border border-border/80 bg-muted/[0.08] px-4 py-3 text-xs sm:grid-cols-2 lg:grid-cols-4 sm:px-5">
+                    <div className="grid gap-2 rounded-xl border border-border/80 bg-zinc-50 px-4 py-3 text-xs sm:grid-cols-2 lg:grid-cols-4 sm:px-5">
                       <div className="rounded-md border border-border/70 bg-background px-3 py-2" aria-label="学制信息">
                         <p className="text-muted-foreground">学制</p>
                         <p className="mt-1 text-sm font-semibold text-foreground">{selectedProgramPair.program.duration}</p>
@@ -832,7 +855,7 @@ export default function WorkspacePage() {
 
                     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
                       <div className="space-y-3">
-                        <section id="section-facts" className="rounded-md border border-border/70 bg-muted/[0.06]">
+                        <section id="section-facts" className="rounded-md border border-border/70 bg-zinc-50">
                           <div className="border-b border-border/70 px-3 py-2">
                             <p className="text-xs font-medium text-muted-foreground">项目信息</p>
                           </div>
@@ -943,7 +966,13 @@ export default function WorkspacePage() {
                                 )}
                               >
                                 {selectedProgramExtra.curriculum.map((item, idx) => (
-                                  <span key={idx} className="rounded-full bg-muted px-2.5 py-1 text-xs text-foreground/90">
+                                  <span
+                                    key={idx}
+                                    className={cn(
+                                      "rounded-full px-2.5 py-1 text-xs",
+                                      getNotionTagClass(idx)
+                                    )}
+                                  >
                                     {item}
                                   </span>
                                 ))}
@@ -954,13 +983,19 @@ export default function WorkspacePage() {
                       </div>
 
                       <aside className="space-y-3">
-                        <div className="space-y-2 rounded-md border border-border/70 p-3">
+                            <div className="space-y-2 rounded-md border border-border/70 p-3">
                           <p className="text-xs font-medium text-muted-foreground">申请要求</p>
-                          {selectedProgramPair.program.requirements.map((req, idx) => (
-                            <div key={idx} className="rounded-full bg-muted px-2.5 py-1 text-xs text-foreground/90">
-                              {req}
-                            </div>
-                          ))}
+                              {selectedProgramPair.program.requirements.map((req, idx) => (
+                                <div
+                                  key={idx}
+                                  className={cn(
+                                    "rounded-full px-2.5 py-1 text-xs",
+                                    getNotionTagClass(idx + 2)
+                                  )}
+                                >
+                                  {req}
+                                </div>
+                              ))}
                         </div>
 
                         {selectedProgramExtra && (
@@ -1054,7 +1089,7 @@ export default function WorkspacePage() {
                         <button
                           type="button"
                           onClick={() => jumpToApplicationList()}
-                          className="rounded-lg border border-border/70 bg-muted/[0.16] px-4 py-3.5 text-left transition-colors hover:bg-muted/[0.24]"
+                          className="rounded-lg border border-border/70 bg-zinc-50 px-4 py-3.5 text-left transition-colors hover:bg-zinc-100"
                         >
                           <span className="text-[11px] font-medium tracking-wide text-muted-foreground">项目</span>
                           <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
@@ -1066,20 +1101,20 @@ export default function WorkspacePage() {
                           onClick={() => {
                             jumpToApplicationList();
                           }}
-                          className="rounded-lg border border-border/70 bg-muted/[0.16] px-4 py-3.5 text-left transition-colors hover:bg-muted/[0.24]"
+                          className="rounded-lg border border-border/70 bg-zinc-50 px-4 py-3.5 text-left transition-colors hover:bg-zinc-100"
                         >
                           <span className="text-[11px] font-medium tracking-wide text-muted-foreground">院校</span>
                           <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
                             {dashboardStats.schools}
                           </p>
                         </button>
-                        <div className="rounded-lg border border-border/70 bg-muted/[0.16] px-4 py-3.5">
+                        <div className="rounded-lg border border-border/70 bg-zinc-50 px-4 py-3.5">
                           <span className="text-[11px] font-medium tracking-wide text-muted-foreground">待申请</span>
                           <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
                             {dashboardStats.todo}
                           </p>
                         </div>
-                        <div className="rounded-lg border border-border/70 bg-muted/[0.16] px-4 py-3.5">
+                        <div className="rounded-lg border border-border/70 bg-zinc-50 px-4 py-3.5">
                           <span className="text-[11px] font-medium tracking-wide text-muted-foreground">
                             进行中
                           </span>
@@ -1112,7 +1147,7 @@ export default function WorkspacePage() {
                       </Button>
                     )}
                   </div>
-                  <Card className="border-border/80 bg-card/95 shadow-none">
+                  <Card className="border-border/80 bg-white shadow-none">
                     <CardHeader className="pb-1">
                       <CardTitle className="flex items-center gap-2 text-base">
                         <User className="h-4 w-4 text-muted-foreground" />
@@ -1185,7 +1220,7 @@ export default function WorkspacePage() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-border/80 bg-card/95 shadow-none">
+                  <Card className="border-border/80 bg-white shadow-none">
                     <CardHeader className="pb-2">
                       <CardTitle className="flex items-center gap-2 text-base">
                         <Briefcase className="h-4 w-4 text-muted-foreground" />
@@ -1197,7 +1232,7 @@ export default function WorkspacePage() {
                         <p className="text-sm text-muted-foreground">未填</p>
                       ) : (
                         (isBackgroundEditing ? backgroundDraft?.workExperience : questionnaireData.workExperience)?.map((work, index) => (
-                          <article key={work.id} className="rounded-lg border border-border/70 bg-muted/[0.08] p-3.5">
+                          <article key={work.id} className="rounded-lg border border-border/70 bg-zinc-50 p-3.5">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               {isBackgroundEditing ? (
                                 <div className="grid w-full gap-2 sm:grid-cols-2">
@@ -1260,7 +1295,7 @@ export default function WorkspacePage() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-border/80 bg-card/95 shadow-none">
+                  <Card className="border-border/80 bg-white shadow-none">
                     <CardHeader className="pb-2">
                       <CardTitle className="flex items-center gap-2 text-base">
                         <FolderGit2 className="h-4 w-4 text-muted-foreground" />
@@ -1272,7 +1307,7 @@ export default function WorkspacePage() {
                         <p className="text-sm text-muted-foreground">未填</p>
                       ) : (
                         (isBackgroundEditing ? backgroundDraft?.projects : questionnaireData.projects)?.map((proj, index) => (
-                          <article key={proj.id} className="rounded-lg border border-border/70 bg-muted/[0.08] p-3.5">
+                          <article key={proj.id} className="rounded-lg border border-border/70 bg-zinc-50 p-3.5">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               {isBackgroundEditing ? (
                                 <div className="grid w-full gap-2 sm:grid-cols-2">
@@ -1346,13 +1381,22 @@ export default function WorkspacePage() {
                         <p className="truncate text-sm font-semibold text-foreground">{selectedSchool.nameEn}</p>
                         <p className="truncate text-xs text-muted-foreground">{selectedSchool.name}</p>
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          <Badge variant="outline" className="text-[11px]">
+                          <Badge
+                            variant="outline"
+                            className={cn("text-[11px]", "border-transparent bg-[#E8F3FF] text-[#4080FF]")}
+                          >
                             QS #{selectedSchool.ranking}
                           </Badge>
-                          <Badge variant="outline" className="text-[11px]">
+                          <Badge
+                            variant="outline"
+                            className={cn("text-[11px]", "border-transparent bg-[#BEDAFF] text-[#165DFF]")}
+                          >
                             {selectedSchool.city} · {selectedSchool.country}
                           </Badge>
-                          <Badge variant="outline" className="text-[11px]">
+                          <Badge
+                            variant="outline"
+                            className={cn("text-[11px]", "border-transparent bg-[#E8DEEE] text-[#492F5B]")}
+                          >
                             {displayPrograms.length} 个项目
                           </Badge>
                         </div>
@@ -1378,7 +1422,7 @@ export default function WorkspacePage() {
                     <h2 className="text-sm font-medium text-foreground">已保存文书</h2>
                   </div>
                   {schoolDraftSheets.length === 0 ? (
-                    <p className="rounded-lg border border-dashed border-border/80 bg-muted/15 px-4 py-6 text-center text-sm text-muted-foreground">
+                    <p className="rounded-lg border border-dashed border-border/80 bg-zinc-50 px-4 py-6 text-center text-sm text-muted-foreground">
                       暂无已保存内容。在下方项目中点击笔形图标起草后，会以预览卡片显示在这里。
                     </p>
                   ) : (
@@ -1485,7 +1529,7 @@ export default function WorkspacePage() {
                     return (
                     <div key={school.id} className="overflow-hidden rounded-lg border border-border bg-card">
                       {!hideSchoolHeader && (
-                        <div className="flex items-center gap-3 border-b border-border bg-muted/20 px-4 py-3">
+                        <div className="flex items-center gap-3 border-b border-border bg-zinc-50 px-4 py-3">
                           <SchoolLogoMark school={school} size="row" rounded="md" />
                           <div className="min-w-0 flex-1">
                             <h3 className="font-medium text-foreground">{school.name}</h3>
@@ -1509,14 +1553,14 @@ export default function WorkspacePage() {
                                 "p-3.5 sm:p-4",
                                 useDetailedCard
                                   ? "space-y-3"
-                                  : "flex flex-col gap-3 transition-colors hover:bg-muted/15 sm:flex-row sm:items-center sm:justify-between"
+                                  : "flex flex-col gap-3 transition-colors hover:bg-zinc-50 sm:flex-row sm:items-center sm:justify-between"
                               )}
                             >
                               {useDetailedCard ? (
                                 <button
                                   type="button"
                                   onClick={() => openProgramDetail(program)}
-                                  className="block w-full px-1 py-1.5 text-left transition-colors hover:bg-muted/[0.08]"
+                                  className="block w-full px-1 py-1.5 text-left transition-colors hover:bg-zinc-50"
                                 >
                                   <div className="flex items-start justify-between gap-2">
                                     <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
@@ -1560,9 +1604,8 @@ export default function WorkspacePage() {
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Button
-                                      variant="outline"
                                       size="icon"
-                                      className="h-9 w-9"
+                                      className="h-9 w-9 rounded-xl shadow-sm"
                                       aria-label="查看项目"
                                       onClick={() => openProgramDetail(program)}
                                     >

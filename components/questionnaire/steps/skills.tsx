@@ -118,7 +118,7 @@ export function SkillsForm({ data, onChange }: SkillsFormProps) {
                         value={skill.level}
                         onValueChange={(value) => updateSkillLevel(skill.id, value as Skill["level"])}
                       >
-                        <SelectTrigger className="h-8 w-20 text-xs border-0 bg-muted/40 shadow-none">
+                      <SelectTrigger className="h-8 w-20 border-0 bg-[#F1F1EF] text-xs text-[#37352F] shadow-none">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -214,11 +214,11 @@ export function SkillsForm({ data, onChange }: SkillsFormProps) {
                     key={skill}
                     variant="outline"
                     className={cn(
-                      "border-border/40 bg-transparent px-2 py-0.5 text-[11px] font-normal text-muted-foreground shadow-none",
+                      "border-transparent bg-[#E8F7FF] px-2 py-0.5 text-[11px] font-normal text-[#3491FA] shadow-none",
                       "transition-colors",
-                      isAdded && "border-transparent bg-muted/30 text-muted-foreground/70",
+                      isAdded && "bg-[#E8FFEA] text-[#00B42A]",
                       !isAdded &&
-                        "cursor-pointer hover:border-border/50 hover:bg-muted/25 hover:text-foreground/70"
+                        "cursor-pointer hover:bg-[#FFF7E8] hover:text-[#FF7D00]"
                     )}
                     onClick={() => !isAdded && addSuggestedSkill(skill, category as Skill["category"])}
                   >
