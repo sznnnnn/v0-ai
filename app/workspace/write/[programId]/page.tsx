@@ -1117,40 +1117,22 @@ export default function WriteDocumentPage() {
               </section>
 
               <aside className="space-y-2 lg:sticky lg:top-24 lg:self-start">
-                <div className="rounded-lg border border-border bg-card px-3 py-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-foreground">主编批注</p>
-                    <Button type="button" size="sm" variant="outline" onClick={runCritiqueScan} disabled={scanState === "scanning"}>
-                      {scanState === "scanning" ? "重扫中..." : "重扫"}
-                    </Button>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    进度：{critiqueStats.resolved}/{critiqueStats.total} 已处理，{critiqueStats.open} 待处理
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    <span className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                      待处理 {critiqueStats.open}
-                    </span>
-                    <span className="rounded border border-border px-1.5 py-0.5 text-[11px] text-emerald-700">
-                      已处理 {critiqueStats.resolved}
-                    </span>
-                    <span className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                      已忽略 {critiqueStats.dismissed}
-                    </span>
-                  </div>
-                  {applyingCritiqueId != null && (
-                    <div className="mt-2">
-                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                        <div
-                          className="h-full bg-primary transition-all duration-200 ease-out"
-                          style={{ width: `${applyProgress}%` }}
-                        />
-                      </div>
-                      <p className="mt-1 text-[11px] text-muted-foreground">AI 正在生成范例句...</p>
+                {applyingCritiqueId != null && (
+                  <div className="rounded-lg border border-border bg-card px-3 py-2">
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full bg-primary transition-all duration-200 ease-out"
+                        style={{ width: `${applyProgress}%` }}
+                      />
                     </div>
-                  )}
-                  {feedbackText && <p className="mt-2 text-xs text-primary">{feedbackText}</p>}
-                </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">AI 正在生成范例句...</p>
+                  </div>
+                )}
+                {feedbackText && (
+                  <div className="rounded-lg border border-border bg-card px-3 py-2">
+                    <p className="text-xs text-primary">{feedbackText}</p>
+                  </div>
+                )}
                 <AnimatePresence initial={false}>
                   {visibleCritiques.map((critique) => {
                     const active = critique.id === activeCritiqueId;
