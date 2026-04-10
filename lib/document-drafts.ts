@@ -22,6 +22,7 @@ const MASTER_PS_KEY = "__master_ps__";
 export interface DocumentDraftPayload {
   content: string;
   updatedAt: string;
+  workflow?: DraftWorkflowState;
 }
 
 type DraftStore = Record<string, DocumentDraftPayload>;
@@ -31,6 +32,53 @@ export interface DocumentDraftVersion {
   id: string;
   content: string;
   createdAt: string;
+}
+
+export type MicroTaskStage = "select_materials" | "match_requirements" | "bind_paragraphs" | "refine_draft";
+
+export interface ParagraphBindingCard {
+  id: string;
+  title: string;
+  targetRequirementIds: string[];
+  materialIds: string[];
+  aiDraft: string;
+  editedDraft: string;
+}
+
+export interface IntentHistoryItem {
+  id: string;
+  paragraphId: string;
+  intent: "more_specific_results" | "stronger_motivation" | "compress_120_words";
+  before: string;
+  after: string;
+  createdAt: string;
+}
+
+export interface SourceTraceItem {
+  paragraphId: string;
+  materialId: string;
+  materialTitle: string;
+  excerpt: string;
+}
+
+export interface DraftWorkflowState {
+  microTaskState: {
+    currentStage: MicroTaskStage;
+    completedStages: MicroTaskStage[];
+  };
+  selectedMaterialIds: string[];
+  matchedRequirementIds: string[];
+  paragraphBindings: ParagraphBindingCard[];
+  intentHistory: IntentHistoryItem[];
+  sourceTrace: SourceTraceItem[];
+  recommendationCache: string[];
+  narrativeAnswers?: Record<
+    string,
+    {
+      selectedOption?: string;
+      customText?: string;
+    }
+  >;
 }
 
 function templateStorageKey(kind: DocumentDraftKind): string {
@@ -56,6 +104,17 @@ function writeMasterPs(content: string): void {
     updatedAt: new Date().toISOString(),
   };
   writeDraftStore(store);
+}
+
+export function getDefaultPs(): string | null {
+  return readMasterPs();
+}
+
+export function setDefaultPs(content: string): boolean {
+  const t = content.trim();
+  if (!t) return false;
+  writeMasterPs(t);
+  return true;
 }
 
 function maybeSetMasterPs(content: string): void {
@@ -140,7 +199,6 @@ export function formatQuestionnaireBackgroundBlock(q: QuestionnaireData): string
   const p = q.personalInfo;
 
   const basic: string[] = [];
-  if (nz(p.fullName)) basic.push(`姓名：${p.fullName.trim()}`);
   if (nz(p.intendedMajor)) basic.push(`目标专业：${p.intendedMajor.trim()}`);
   if (nz(p.intendedApplicationField)) basic.push(`申请领域：${p.intendedApplicationField.trim()}`);
   if (nz(p.targetSemester)) basic.push(`目标入学：${p.targetSemester.trim()}`);
@@ -172,34 +230,6 @@ export function formatQuestionnaireBackgroundBlock(q: QuestionnaireData): string
       out.push(`- ${head}${meta ? `（${meta}）` : ""}`);
       if (nz(e.achievements)) out.push(`  补充：${e.achievements!.trim()}`);
     }
-    out.push("");
-  }
-
-  const testBits: string[] = [];
-  const te = q.tests;
-  if (nz(te.toefl?.total)) {
-    testBits.push(
-      `TOEFL ${te.toefl!.total}（R${te.toefl!.reading}/L${te.toefl!.listening}/S${te.toefl!.speaking}/W${te.toefl!.writing}）`
-    );
-  }
-  if (nz(te.ielts?.overall)) {
-    testBits.push(
-      `IELTS ${te.ielts!.overall}（R${te.ielts!.reading}/L${te.ielts!.listening}/S${te.ielts!.speaking}/W${te.ielts!.writing}）`
-    );
-  }
-  if (nz(te.gre?.verbal) || nz(te.gre?.quantitative)) {
-    testBits.push(
-      `GRE V${te.gre?.verbal ?? "—"} Q${te.gre?.quantitative ?? "—"} AW${te.gre?.analyticalWriting ?? "—"}`
-    );
-  }
-  if (nz(te.gmat?.total)) {
-    testBits.push(
-      `GMAT ${te.gmat!.total}（V${te.gmat!.verbal}/Q${te.gmat!.quantitative}/IR${te.gmat!.integratedReasoning}/AW${te.gmat!.analyticalWriting}）`
-    );
-  }
-  if (testBits.length) {
-    out.push("【标化成绩】");
-    testBits.forEach((b) => out.push(`- ${b}`));
     out.push("");
   }
 
@@ -388,10 +418,15 @@ function extractBodyAfterHeader(content: string): string {
   const lines = content.split("\n");
   if (lines[0]?.startsWith("【") && lines[0].includes("】")) {
     let i = 1;
-    while (i < lines.length && lines[i] !== undefined && !lines[i]!.includes("学位：")) {
+    while (
+      i < lines.length &&
+      lines[i] !== undefined &&
+      !lines[i]!.includes("学位：") &&
+      !lines[i]!.startsWith("Degree:")
+    ) {
       i++;
     }
-    if (i < lines.length && lines[i]?.includes("学位：")) {
+    if (i < lines.length && (lines[i]?.includes("学位：") || lines[i]?.startsWith("Degree:"))) {
       i++;
       while (i < lines.length && lines[i]?.trim() === "") {
         i++;
@@ -544,9 +579,11 @@ export function getDraftExamplePreview(
 
 export function saveDraft(programId: string, kind: DocumentDraftKind, content: string): void {
   const store = readDraftStore();
+  const prevWorkflow = store[draftStorageKey(programId, kind)]?.workflow;
   store[draftStorageKey(programId, kind)] = {
     content,
     updatedAt: new Date().toISOString(),
+    workflow: prevWorkflow,
   };
   writeDraftStore(store);
   if (kind === "ps" && content.trim()) {
@@ -554,6 +591,22 @@ export function saveDraft(programId: string, kind: DocumentDraftKind, content: s
     maybeSetMasterPs(content);
   }
   updateTemplateAfterSave(programId, kind, content);
+}
+
+export function saveDraftWorkflow(
+  programId: string,
+  kind: DocumentDraftKind,
+  workflow: DraftWorkflowState
+): void {
+  const store = readDraftStore();
+  const key = draftStorageKey(programId, kind);
+  const prev = store[key];
+  store[key] = {
+    content: prev?.content ?? "",
+    updatedAt: new Date().toISOString(),
+    workflow,
+  };
+  writeDraftStore(store);
 }
 
 export function getProgramIdsWithSavedDrafts(): Set<string> {

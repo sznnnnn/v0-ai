@@ -12,6 +12,7 @@ import { SchoolNotionCover } from "@/components/match/school-notion-cover";
 import { ProgramCard } from "@/components/match/program-card";
 import { useQuestionnaire, useMatchResult } from "@/hooks/use-questionnaire";
 import { generateMatchResult } from "@/lib/mock-match";
+import { getDefaultPs } from "@/lib/document-drafts";
 import type { QuestionnaireData, School } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -84,6 +85,7 @@ export default function MatchPage() {
   const [selectedSchool, setSelectedSchool] = useState<School | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [addedPrograms, setAddedPrograms] = useState<string[]>([]);
+  const [defaultPs, setDefaultPs] = useState<string | null>(null);
   const generationTimersRef = useRef<number[]>([]);
 
   const persistAddedPrograms = useCallback((ids: string[]) => {
@@ -116,13 +118,13 @@ export default function MatchPage() {
     }
 
     const finishTimerId = window.setTimeout(() => {
-      const newResult = generateMatchResult(questionnaireData);
+      const newResult = generateMatchResult(questionnaireData, { defaultPs });
       saveResult(newResult);
       setSelectedSchool(null);
       setIsGenerating(false);
     }, instant ? 80 : steps.length * stepDuration + 300);
     generationTimersRef.current.push(finishTimerId);
-  }, [clearGenerationTimers, questionnaireData, saveResult]);
+  }, [clearGenerationTimers, questionnaireData, saveResult, defaultPs]);
 
   useEffect(() => {
     if (isQuestionnaireLoaded && isResultLoaded && !result) {
@@ -151,6 +153,10 @@ export default function MatchPage() {
     } catch {
       localStorage.removeItem("edumatch_added_programs");
     }
+  }, []);
+
+  useEffect(() => {
+    setDefaultPs(getDefaultPs());
   }, []);
 
   const handleAddProgram = (programId: string) => {
@@ -461,6 +467,11 @@ export default function MatchPage() {
                       勾选项目后加入工作台；左侧可筛选分档与学校。
                     </p>
                   )}
+                  <p className="text-ui-label leading-relaxed text-muted-foreground">
+                    {defaultPs?.trim()
+                      ? "当前推荐已参考你的默认文书；可在文书页手动更新后重新匹配。"
+                      : "当前推荐基于问卷信息；首次生成并保存文书后会自动形成默认文书。"}
+                  </p>
                 </div>
                 <Button
                   type="button"

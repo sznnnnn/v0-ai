@@ -265,8 +265,29 @@ function buildProfileMatchHint(userData: QuestionnaireData): string | null {
   return s;
 }
 
+function normalizeDefaultPsKeywords(defaultPs: string | null | undefined): string[] {
+  if (!defaultPs) return [];
+  const text = defaultPs.toLowerCase();
+  const pairs: Array<{ keywords: string[]; tag: string }> = [
+    { keywords: ["computer", "计算机", "cs", "软件", "algorithm"], tag: "cs" },
+    { keywords: ["data", "数据", "analytics", "统计"], tag: "ds" },
+    { keywords: ["ai", "人工智能", "machine learning", "ml", "deep learning"], tag: "ai" },
+    { keywords: ["machine learning", "ml", "深度学习"], tag: "ml" },
+    { keywords: ["finance", "金融", "asset", "quant"], tag: "mfin" },
+    { keywords: ["financial engineering", "金融工程", "derivative"], tag: "mfe" },
+    { keywords: ["mba", "business", "管理", "strategy"], tag: "mba" },
+  ];
+  const tags = pairs
+    .filter((p) => p.keywords.some((k) => text.includes(k)))
+    .map((p) => p.tag);
+  return [...new Set(tags)];
+}
+
 // 根据用户背景生成匹配结果
-export function generateMatchResult(userData: QuestionnaireData): MatchResult {
+export function generateMatchResult(
+  userData: QuestionnaireData,
+  opts?: { defaultPs?: string | null }
+): MatchResult {
   const targetCountries = userData.personalInfo.targetCountry || [];
   const intendedMajor = userData.personalInfo.intendedMajor || "";
   const intendedField = userData.personalInfo.intendedApplicationField || "";
@@ -277,6 +298,8 @@ export function generateMatchResult(userData: QuestionnaireData): MatchResult {
   const targetCountryNames = countryCodes.map((c) => countryMapping[c] || c);
   const majorSearchText = [intendedMajor, intendedField].filter(Boolean).join(" ");
   const relevantProgramTypes = getProgramTagsByMajor(majorSearchText);
+  const defaultPsTags = normalizeDefaultPsKeywords(opts?.defaultPs);
+  const mergedProgramTypes = [...new Set([...relevantProgramTypes, ...defaultPsTags])];
 
   // 根据国家偏好筛选学校，若为空则回退到全量
   const countryMatchedSchools = schoolsDatabase.filter((school) =>
@@ -313,7 +336,7 @@ export function generateMatchResult(userData: QuestionnaireData): MatchResult {
   // 优先按专业关键词匹配项目
   let filteredPrograms = programsDatabase.filter((program) => {
     if (!selectedSchoolIds.includes(program.schoolId)) return false;
-    const majorMatched = relevantProgramTypes.some((type) => program.id.includes(type));
+    const majorMatched = mergedProgramTypes.some((type) => program.id.includes(type));
     return majorMatched;
   });
 
@@ -385,6 +408,13 @@ export function generateMatchResult(userData: QuestionnaireData): MatchResult {
       if (majorHit) {
         matchScore += 4;
         matchReasons.push("专业方向匹配度高");
+      }
+    }
+    if (defaultPsTags.length > 0) {
+      const defaultPsHit = defaultPsTags.some((type) => program.id.includes(type));
+      if (defaultPsHit) {
+        matchScore += 3;
+        matchReasons.push("已参考默认文书中的方向偏好");
       }
     }
 

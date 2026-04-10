@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Bookmark,
@@ -46,8 +46,12 @@ function estimateCny(value: string): string | null {
 
 export default function ProgramDetailPage() {
   const router = useRouter();
-  const params = useParams();
-  const programId = typeof params.programId === "string" ? params.programId : "";
+  const pathname = usePathname();
+  const programId = useMemo(() => {
+    const parts = pathname.split("/").filter(Boolean);
+    const raw = parts[parts.length - 1] ?? "";
+    return decodeURIComponent(raw);
+  }, [pathname]);
   const { result, isLoaded } = useMatchResult();
   const [addedPrograms, setAddedPrograms] = useState<string[]>([]);
   const [favoritePrograms, setFavoritePrograms] = useState<string[]>([]);

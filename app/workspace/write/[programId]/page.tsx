@@ -8,7 +8,8 @@ import {
 } from "@/lib/document-draft-demos";
 import Image from "next/image";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -21,17 +22,40 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ArrowLeft, Check, Eye, FileText, Plus, Sparkles } from "lucide-react";
-import { GuestBanner } from "@/components/questionnaire/guest-banner";
+import {
+  ArrowLeft,
+  Check,
+  CheckCircle2,
+  ChevronRight,
+  Eye,
+  FileText,
+  Info,
+  LoaderCircle,
+  Languages,
+  MessageSquare,
+  Plus,
+  SendHorizonal,
+  Sparkles,
+  TriangleAlert,
+  XCircle,
+} from "lucide-react";
 import { useMatchResult, useQuestionnaire } from "@/hooks/use-questionnaire";
 import {
   type DocumentDraftKind,
-  buildProjectHeader,
+  type DraftWorkflowState,
+  type IntentHistoryItem,
+  type ParagraphBindingCard,
+  type SourceTraceItem,
+  buildDraftSeed,
+  setDefaultPs,
   getResolvedDraftContent,
   getDraftExamplePreview,
   listDraftVersions,
   saveDraft,
+  saveDraftWorkflow,
   saveDraftVersion,
+  type MicroTaskStage,
+  getDraft,
   getProgramIdsWithSavedDrafts,
   type DraftContext,
 } from "@/lib/document-drafts";
@@ -54,13 +78,18 @@ function draftContextFromPair(pair: {
 }
 
 function buildPsDraft(ctx: DraftContext, q: QuestionnaireData): string {
-  return getResolvedDraftContent("ps-auto", "ps", ctx, q);
+  return buildDraftSeed("ps", ctx, q);
 }
 
 type BackgroundMaterial = {
   id: string;
   title: string;
   detail: string;
+};
+
+type ProgramSignalOption = {
+  id: string;
+  text: string;
 };
 
 function pickBackgroundMaterials(q: QuestionnaireData): BackgroundMaterial[] {
@@ -89,119 +118,229 @@ function pickBackgroundMaterials(q: QuestionnaireData): BackgroundMaterial[] {
   return out;
 }
 
-function pickMaterialText(
-  materials: BackgroundMaterial[],
-  titleIncludes: string,
-  fallback: string
-): string {
-  const hit = materials.find((m) => m.title.includes(titleIncludes));
-  return hit?.detail?.trim() || fallback;
-}
-
 function normalizeLine(text: string, max = 120): string {
   const t = text.replace(/\s+/g, " ").trim();
   if (!t) return "";
   return t.length > max ? `${t.slice(0, max - 1)}…` : t;
 }
 
-function buildGeneratedPs(
-  ctx: DraftContext,
-  structure: "classic" | "story" | "impact",
+function tokenizeText(text: string): string[] {
+  return (text.toLowerCase().match(/[a-z]{3,}/g) ?? []).slice(0, 80);
+}
+
+function buildProgramSignalOptions(pair: {
+  program: { department: string; curriculumNote?: string; description: string };
+  school: { campusStyle?: string; studentLife?: string };
+}): ProgramSignalOption[] {
+  const out: ProgramSignalOption[] = [];
+  const { program, school } = pair;
+  if (program.curriculumNote?.trim()) {
+    out.push({ id: "signal_curriculum", text: `课程方向：${normalizeLine(program.curriculumNote, 80)}` });
+  }
+  if (program.department?.trim()) {
+    out.push({ id: "signal_department", text: `院系定位：${program.department.trim()}` });
+  }
+  if (program.description?.trim()) {
+    out.push({ id: "signal_description", text: `项目特点：${normalizeLine(program.description, 80)}` });
+  }
+  if (school.campusStyle?.trim()) {
+    out.push({ id: "signal_campus", text: `培养氛围：${normalizeLine(school.campusStyle, 80)}` });
+  }
+  if (school.studentLife?.trim()) {
+    out.push({ id: "signal_community", text: `社群与资源：${normalizeLine(school.studentLife, 80)}` });
+  }
+  if (out.length === 0) {
+    out.push(
+      { id: "signal_course_default", text: "课程标签：补充该项目课程关键词（如 Distributed Systems）" },
+      { id: "signal_prof_default", text: "教授方向：补充目标教授/实验室方向（如 HCI / Robotics）" },
+      { id: "signal_goal_default", text: "目标能力：补充你希望通过项目获得的能力标签" }
+    );
+  }
+  return out.slice(0, 6);
+}
+
+function recommendMaterialIds(
   materials: BackgroundMaterial[],
-  q: QuestionnaireData
+  requirements: ProgramSignalOption[],
+  reasons: string[]
+): string[] {
+  if (materials.length === 0) return [];
+  const bag = tokenizeText(requirements.map((r) => r.text).join(" ")) .concat(
+    tokenizeText(reasons.join(" "))
+  );
+  const rank = materials
+    .map((m) => {
+      const text = `${m.title} ${m.detail}`.toLowerCase();
+      const score = bag.reduce((acc, kw) => (text.includes(kw) ? acc + 1 : acc), 0);
+      return { id: m.id, score };
+    })
+    .sort((a, b) => b.score - a.score);
+  return rank.filter((r) => r.score > 0).slice(0, 5).map((r) => r.id);
+}
+
+function buildParagraphCards(
+  selectedMaterialIds: string[],
+  matchedRequirementIds: string[],
+  materials: BackgroundMaterial[],
+  requirements: ProgramSignalOption[]
+): ParagraphBindingCard[] {
+  const selected = materials.filter((m) => selectedMaterialIds.includes(m.id));
+  const reqText = requirements
+    .filter((r) => matchedRequirementIds.includes(r.id))
+    .map((r) => r.text)
+    .join("；");
+  const cards: Array<{ id: string; title: string }> = [
+    { id: "motivation", title: "动机与目标" },
+    { id: "preparation", title: "准备度与经历" },
+    { id: "fit", title: "项目契合与贡献" },
+  ];
+  return cards.map((card, idx) => {
+    const mat = selected[idx % Math.max(selected.length, 1)];
+    const base = mat
+      ? `${mat.title}：${normalizeLine(mat.detail, 150)}`
+      : "待补充具体素材。";
+    const aiDraft = `${base}${reqText ? ` 重点呼应：${normalizeLine(reqText, 120)}` : ""}`;
+    return {
+      id: card.id,
+      title: card.title,
+      targetRequirementIds: matchedRequirementIds,
+      materialIds: mat ? [mat.id] : [],
+      aiDraft,
+      editedDraft: aiDraft,
+    };
+  });
+}
+
+function applyIntentTransform(text: string, intent: IntentHistoryItem["intent"]): string {
+  const trimmed = text.trim();
+  if (!trimmed) return text;
+  if (intent === "more_specific_results") {
+    return `${trimmed}\n补充量化结果：请明确范围、指标与最终影响（如增长比例、覆盖人数、效率提升）。`;
+  }
+  if (intent === "stronger_motivation") {
+    return `${trimmed}\n动机强化：补一句“为什么是现在、为什么是这个项目、毕业后如何落地”。`;
+  }
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  if (words.length <= 120) return trimmed;
+  return `${words.slice(0, 120).join(" ")}...`;
+}
+
+type AiRewriteTone = "academic" | "reflective";
+type AiRewriteFocus = "impact" | "fit";
+type AiRewriteLength = "tight" | "balanced";
+type DemoCritiqueColor = "red" | "amber" | "green";
+type DemoCritique = {
+  id: number;
+  type: string;
+  title: string;
+  quote: string;
+  harshComment: string;
+  questions: string[];
+  example: string;
+  color: DemoCritiqueColor;
+  suggestion?: { action: "replace"; text: string };
+};
+type CritiqueRange = { critique: DemoCritique; start: number; end: number };
+
+function applyAiSuggestionPreset(
+  text: string,
+  tone: AiRewriteTone,
+  focus: AiRewriteFocus,
+  length: AiRewriteLength
 ): string {
-  const header = buildProjectHeader(ctx);
-  const major = q.personalInfo.intendedMajor?.trim() || q.personalInfo.intendedApplicationField?.trim() || "目标方向";
-  const motivation = normalizeLine(
-    pickMaterialText(
-      materials,
-      "申请动机",
-      q.personalInfo.motivationNote || "我希望在硕士阶段系统深化学术能力，并把已有实践经验转化为更稳定的方法论。"
-    )
-  );
-  const research = normalizeLine(
-    pickMaterialText(
-      materials,
-      "研究兴趣",
-      q.personalInfo.researchInterestNote || "我关注如何把学术训练与真实问题结合，形成可验证、可复用的解决方案。"
-    )
-  );
-  const edu = normalizeLine(
-    pickMaterialText(
-      materials,
-      "教育经历",
-      q.education[0]
-        ? `${q.education[0].school} · ${q.education[0].major} · ${q.education[0].degree}`
-        : "本科阶段打下了与目标方向相关的课程与方法基础。"
-    ),
-    150
-  );
-  const proj = normalizeLine(
-    pickMaterialText(
-      materials,
-      "项目经历",
-      q.projects[0]
-        ? `${q.projects[0].name} · ${q.projects[0].role} · ${q.projects[0].result || "形成可落地的实践经验"}`
-        : "通过项目实践，我逐步形成了从问题定义到方案落地的完整闭环能力。"
-    ),
-    160
-  );
-  const work = normalizeLine(
-    pickMaterialText(
-      materials,
-      "实习/工作",
-      q.workExperience[0]
-        ? `${q.workExperience[0].company} · ${q.workExperience[0].position} · ${q.workExperience[0].result || "积累了跨团队协作经验"}`
-        : "在实习与协作场景中，我强化了执行力与沟通能力。"
-    ),
-    160
-  );
-  const closeGoal = normalizeLine(
-    q.personalInfo.futurePlan ||
-      "我希望在完成硕士训练后，继续在相关领域深耕，并把所学转化为长期可持续的职业能力。"
-  );
+  const trimmed = text.trim();
+  if (!trimmed) return text;
+  const hintTone = tone === "academic" ? "语气：更学术、客观。" : "语气：更个人、反思。";
+  const hintFocus = focus === "impact" ? "重点：突出成果与量化影响。" : "重点：突出与项目课程/资源匹配。";
+  const hintLength = length === "tight" ? "长度：整体再压缩约 20%。" : "长度：保持完整叙事。";
+  return `${trimmed}\n\n[AI润色建议]\n${hintTone} ${hintFocus} ${hintLength}`;
+}
 
-  if (structure === "story") {
-    return (
-      `${header}` +
-      `我与 ${major} 的连接并非一蹴而就，而是从具体问题中逐步形成。${motivation}\n\n` +
-      `在学习阶段，我最重要的积累来自：${edu}\n` +
-      `这段经历让我建立了清晰的方法意识，也让我意识到自己需要更系统的研究训练。\n\n` +
-      `随后在实践中，我通过 ${proj}，把想法转化为可执行方案；而在 ${work} 的过程中，我进一步理解了真实场景对结果质量与协作效率的要求。\n\n` +
-      `因此，我希望在 ${ctx.schoolNameEn} 的 ${ctx.programNameEn} 中，围绕既有兴趣继续深入：${research}\n` +
-      `我期待将课程训练、项目资源与跨学科环境结合，形成更成熟的研究与实践能力。\n\n` +
-      `对我而言，这次申请不仅是学位升级，更是能力结构的重塑。${closeGoal}\n`
-    );
+type DemoWordRange = { min: number; max: number };
+
+function getDemoWordRange(schoolNameEn?: string): DemoWordRange {
+  const school = (schoolNameEn ?? "").toUpperCase();
+  const isG5OrLse = ["OXFORD", "CAMBRIDGE", "IMPERIAL", "UCL", "LSE"].some((k) => school.includes(k));
+  if (isG5OrLse) return { min: 1000, max: 1500 };
+  const isKclOrWbs = ["KCL", "KING'S", "WARWICK", "WBS"].some((k) => school.includes(k));
+  if (isKclOrWbs) return { min: 500, max: 800 };
+  return { min: 800, max: 1200 };
+}
+
+function countEnWords(text: string): number {
+  return (text.match(/[A-Za-z]+(?:'[A-Za-z]+)*/g) ?? []).length;
+}
+
+function countZhChars(text: string): number {
+  return (text.match(/[\u4e00-\u9fff]/g) ?? []).length;
+}
+
+function estimateWords(text: string, lang: "zh-CN" | "en"): number {
+  if (lang === "en") return countEnWords(text);
+  // 中文演示稿按“汉字约折算 0.65 英文词”估算，兼容中英混排。
+  return Math.round(countZhChars(text) * 0.65 + countEnWords(text));
+}
+
+function buildZhDemoDraft(targetMinWords: number): string {
+  const base =
+    "我从小就对人机交互充满热情，科技改变生活，所以我选择了这个专业。在大学期间，我参与了多个互联网项目。在最近的一段实习中，我独立开发了让公司营收翻倍的系统，极大提升了用户体验。我申请 Human-Computer Interaction 硕士并非出于抽象兴趣，而是基于一次可验证的研究结论：在校园心理支持场景中，用户流失并不主要源于信息缺失，而是源于关键交互节点的决策负担过高。在本科交互设计课程中，我负责将访谈记录、行为日志与任务流映射为可执行的改版方案。";
+  const expansions = [
+    "具体而言，我先对 32 份访谈逐条编码，抽取“犹豫停留”“路径回退”“预约中断”三类高频行为信号，再据此重构信息层级与引导文案。首轮测试显示，预约路径平均完成时长下降 18%，但高压力用户仍在身份确认步骤出现明显犹豫。",
+    "针对该瓶颈，我引入分步披露和默认选项策略，减少单屏决策负荷，并在第二轮测试中通过任务成功率、误触率和主观负担评分联合评估。结果显示，关键任务完成率由 62% 提升到 81%，高压力用户组的误触率下降 27%。",
+    "这段经历让我明确：HCI 不应停留在“界面美化”，而应以研究方法支撑可复现的行为改进。我由此形成了更务实的研究路径，即在复杂服务场景里将定性洞察转译为可量化设计假设，再通过实验验证其有效性与边界条件。",
+    "在后续实习中，我将同样方法迁移到教育产品的学习路径优化任务中，围绕“首次任务完成”与“次日回访”两个核心指标进行漏斗拆解，并与工程同学协作完成事件埋点修正。该过程进一步训练了我在跨职能协作中的问题定义与证据表达能力。",
+    "因此，我希望在硕士阶段系统补足实验设计、因果推断与交互评估框架，尤其是将用户研究与数据分析闭环化的能力。对我而言，课程价值不仅是知识扩展，更在于建立“问题定义—方法选择—结果解释—产品决策”这一可迁移的专业工作流。",
+    "毕业后，我计划进入以复杂用户决策为核心的产品与研究岗位，优先聚焦数字健康或教育科技场景。短期目标是承担研究驱动的体验优化任务，长期目标是成长为能够主导证据型产品策略的 HCI 从业者，将严谨方法转化为可验证的真实用户价值。",
+  ];
+  let text = base;
+  let i = 0;
+  while (estimateWords(text, "zh-CN") < targetMinWords && i < expansions.length) {
+    text = `${text}\n\n${expansions[i]}`;
+    i += 1;
   }
+  return text;
+}
 
-  if (structure === "impact") {
-    return (
-      `${header}` +
-      `我申请 ${ctx.programNameEn} 的核心目标，是在 ${major} 方向形成更高质量、可持续输出的能力。${motivation}\n\n` +
-      `从准备度来看，我已经具备三类基础：\n` +
-      `1) 学术基础：${edu}\n` +
-      `2) 项目能力：${proj}\n` +
-      `3) 协作与执行：${work}\n\n` +
-      `这些经历让我不只关注“做出结果”，也关注结果背后的方法、评估标准与可复用性。基于此，我希望在贵项目中继续推进：${research}\n\n` +
-      `我相信，借助 ${ctx.schoolNameEn} 的课程与资源，我可以把现有经验升级为更系统的专业能力，并在团队协作中持续创造价值。${closeGoal}\n`
-    );
+function buildEnDemoDraft(targetMinWords: number): string {
+  const base =
+    "My decision to pursue a master's degree in Human-Computer Interaction is driven by evidence from a concrete usability problem rather than a generic interest in technology.";
+  const expansions = [
+    "In an undergraduate design research project, I analyzed 32 semi-structured interviews and mapped user drop-off points along a counseling appointment flow. The key issue was not information scarcity, but cognitive overload at decision-heavy screens. I translated this finding into a redesign plan that simplified navigation, reduced simultaneous choices, and introduced progressive disclosure for sensitive steps.",
+    "To validate the redesign, I conducted two rounds of usability testing and tracked task completion, time-on-task, and error frequency. After the second iteration, completion rate improved from 62% to 81%, while high-stress users showed a 27% reduction in misclicks. These results taught me to treat interaction design as a hypothesis-driven process where every interface decision must be testable and measurable.",
+    "The project also sharpened my methodological discipline. I learned to connect qualitative evidence to measurable design variables, define evaluation metrics before implementation, and report findings in a way that engineering and product stakeholders could act on. This workflow shifted my mindset from feature thinking to evidence-based decision making.",
+    "During a subsequent internship in an education product team, I applied the same approach to optimize first-session onboarding. I collaborated with developers to correct event instrumentation, rebuilt the funnel definitions for key milestones, and supported weekly review meetings with structured analysis. This experience strengthened my ability to frame design questions in operational terms and align cross-functional teams around measurable outcomes.",
+    "At the master's level, I need formal training in experimental design, causal reasoning, and advanced interaction evaluation to move from local optimization to robust, generalizable solutions. I am particularly interested in coursework that integrates user research, analytics, and decision frameworks, because this combination directly addresses my current gap between insightful diagnosis and scalable implementation.",
+    "In the short term, I aim to work in research-driven product roles in digital health or education technology, focusing on high-stakes user journeys where trust and comprehension are critical. In the longer term, I plan to lead evidence-centered product strategy, ensuring that design decisions are grounded in reproducible methods and meaningful user outcomes.",
+  ];
+  let text = base;
+  let i = 0;
+  while (estimateWords(text, "en") < targetMinWords && i < expansions.length) {
+    text = `${text}\n\n${expansions[i]}`;
+    i += 1;
   }
+  return text;
+}
 
-  return (
-    `${header}` +
-    `我申请 ${ctx.schoolNameEn} 的 ${ctx.programNameEn}，希望在 ${major} 方向完成从“具备实践经验”到“具备系统方法与研究能力”的进阶。${motivation}\n\n` +
-    `在学术准备方面，${edu}。这段学习经历帮助我建立了理论基础，也培养了以问题为导向的学习方式。\n\n` +
-    `在实践方面，${proj}；同时，${work}。这些经历让我更清楚地认识到：高质量输出不仅依赖个人能力，也依赖方法设计与跨角色协作。\n\n` +
-    `因此，我希望在贵项目中进一步深化以下方向：${research}\n` +
-    `我期待通过课程训练、项目实践与师生互动，形成更完整的知识结构与应用能力。\n\n` +
-    `若有机会加入该项目，我将以稳定的投入和明确的目标完成硕士阶段训练，并将所学转化为长期价值。${closeGoal}\n`
-  );
+function buildCritiqueRanges(text: string, critiques: DemoCritique[]): CritiqueRange[] {
+  const draft = text.trim();
+  if (!draft) return [];
+  return critiques
+    .map((critique) => {
+      const start = draft.indexOf(critique.quote);
+      return start >= 0 ? { critique, start, end: start + critique.quote.length } : null;
+    })
+    .filter((v): v is CritiqueRange => Boolean(v))
+    .sort((a, b) => a.start - b.start);
 }
 
 export default function WriteDocumentPage() {
-  const params = useParams();
+  const pathname = usePathname();
   const router = useRouter();
-  const programId = typeof params.programId === "string" ? params.programId : "";
+  const programId = useMemo(() => {
+    const parts = pathname.split("/").filter(Boolean);
+    const raw = parts[parts.length - 1] ?? "";
+    return decodeURIComponent(raw);
+  }, [pathname]);
   const { result, isLoaded: matchLoaded } = useMatchResult();
   const { data: questionnaireData, isLoaded: questionnaireLoaded } = useQuestionnaire();
 
@@ -217,10 +356,52 @@ export default function WriteDocumentPage() {
   const [translateState, setTranslateState] = useState<"idle" | "translating">("idle");
   const [draftPreviewScene, setDraftPreviewScene] = useState<DraftPreviewSceneId>("current");
   const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>([]);
-  const [structure, setStructure] = useState<"classic" | "story" | "impact" | null>(null);
+  const [matchedRequirementIds, setMatchedRequirementIds] = useState<string[]>([]);
+  const [customSignalInput, setCustomSignalInput] = useState("");
+  const [customSignals, setCustomSignals] = useState<Array<{ id: string; text: string }>>([]);
+  const [paragraphCards, setParagraphCards] = useState<ParagraphBindingCard[]>([]);
+  const [intentHistory, setIntentHistory] = useState<IntentHistoryItem[]>([]);
+  const [sourceTrace, setSourceTrace] = useState<SourceTraceItem[]>([]);
+  const [currentStage, setCurrentStage] = useState<MicroTaskStage>("select_materials");
+  const [structure, setStructure] = useState<"classic" | "story" | "impact">("classic");
   const [versionDialogOpen, setVersionDialogOpen] = useState(false);
   const [versionRefreshTick, setVersionRefreshTick] = useState(0);
+  const [defaultDocState, setDefaultDocState] = useState<"idle" | "saved">("idle");
+  const [materialView, setMaterialView] = useState<"all" | "selected">("all");
+  const [seedReady, setSeedReady] = useState(false);
+  const [demoState, setDemoState] = useState<"idle" | "loading" | "done">("idle");
+  const [activeCritiqueId, setActiveCritiqueId] = useState<number>(1);
+  const [userReply, setUserReply] = useState("");
+  const [flashCritiqueId, setFlashCritiqueId] = useState<number | null>(null);
+  const [guideCritiqueId, setGuideCritiqueId] = useState<number | null>(null);
+  const [critiqueStatus, setCritiqueStatus] = useState<Record<number, "open" | "resolved" | "dismissed">>({});
+  const [critiqueRanges, setCritiqueRanges] = useState<CritiqueRange[]>([]);
+  const [scanState, setScanState] = useState<"idle" | "scanning">("idle");
+  const [feedbackText, setFeedbackText] = useState<string | null>(null);
+  const [hoveredCritiqueId, setHoveredCritiqueId] = useState<number | null>(null);
+  const [applyingCritiqueId, setApplyingCritiqueId] = useState<number | null>(null);
+  const [applyProgress, setApplyProgress] = useState(0);
   const saveIdleTimer = useRef<number | null>(null);
+  const defaultDocTimer = useRef<number | null>(null);
+  const demoTimer = useRef<number | null>(null);
+  const flashTimer = useRef<number | null>(null);
+  const feedbackTimer = useRef<number | null>(null);
+  const applyTimer = useRef<number | null>(null);
+  const critiqueCardRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  function focusCritique(id: number, guided = false) {
+    setActiveCritiqueId(id);
+    if (guided) setGuideCritiqueId(id);
+  }
+
+  function updateContentAndLanguage(next: string, options?: { updateRanges?: boolean }) {
+    setContent(next);
+    if (activeLanguage === "zh-CN") setZhContent(next);
+    if (activeLanguage === "en") setEnContent(next);
+    if (options?.updateRanges !== false) {
+      setCritiqueRanges(buildCritiqueRanges(next, demoCritiques));
+    }
+  }
+
   /** 避免问卷 data 引用变化时重复覆盖编辑器；换项目时重置 */
   const seededProgramRef = useRef<string | null>(null);
 
@@ -264,13 +445,43 @@ export default function WriteDocumentPage() {
     () => (questionnaireLoaded ? pickBackgroundMaterials(questionnaireData) : []),
     [questionnaireLoaded, questionnaireData]
   );
+  const baseSignalOptions = useMemo(
+    () => (pair ? buildProgramSignalOptions(pair) : []),
+    [pair]
+  );
+  const requirementOptions = useMemo(
+    () => [...baseSignalOptions, ...customSignals],
+    [baseSignalOptions, customSignals]
+  );
+  const recommendedMaterialIds = useMemo(
+    () =>
+      pair
+        ? recommendMaterialIds(materialPool, requirementOptions, pair.program.matchReasons ?? [])
+        : [],
+    [materialPool, pair, requirementOptions]
+  );
+  const visibleMaterials = useMemo(
+    () =>
+      materialView === "selected"
+        ? materialPool.filter((m) => selectedMaterialIds.includes(m.id))
+        : materialPool,
+    [materialPool, materialView, selectedMaterialIds]
+  );
 
   useEffect(() => {
     setSelectedMaterialIds((prev) => prev.filter((id) => materialPool.some((m) => m.id === id)));
   }, [materialPool]);
 
+  useEffect(() => {
+    if (materialView === "selected" && selectedMaterialIds.length === 0) {
+      setMaterialView("all");
+    }
+  }, [materialView, selectedMaterialIds.length]);
+
   const step1Done = selectedMaterialIds.length > 0;
-  const step2Done = structure != null;
+  const step2Done = matchedRequirementIds.length > 0;
+  const step3Done = paragraphCards.length > 0;
+  const step4Done = content.trim().length > 0;
   const zhCharCount = useMemo(
     () => (content.match(/[\u4e00-\u9fff]/g) ?? []).length,
     [content]
@@ -280,6 +491,175 @@ export default function WriteDocumentPage() {
     [content]
   );
   const totalCharsNoSpace = useMemo(() => content.replace(/\s+/g, "").length, [content]);
+  const demoCritiques: DemoCritique[] = useMemo(
+    () => [
+      {
+        id: 1,
+        type: "Fatal Red Flag",
+        title: "数据夸大与造假嫌疑",
+        quote: "我独立开发了让公司营收翻倍的系统，极大提升了用户体验。",
+        harshComment:
+          "这句话在招生官视角里是高风险信号。本科实习生的职责边界通常不支持这种宏观业务归因，夸张叙述会直接伤害可信度与诚信判断。",
+        questions: [
+          "在这个项目中，你具体负责的是哪一个细分模块？",
+          "是否有更真实可验证的微观指标（如响应时延、完成率、误触率）？",
+        ],
+        example:
+          "作为数据实习生，我参与清理了约 2 万条脏数据，并用 Python 搭建基础可视化看板，为分析师后续优化转化率提供数据支持。",
+        color: "red",
+        suggestion: {
+          action: "replace",
+          text: "在【公司/团队名称】实习期间，我负责【具体模块】的数据处理与分析工作，基于【工具/方法】完成了【任务内容】。该工作使【微观指标，如页面加载时延/任务完成率】从【原始值】优化至【结果值】，并为【后续决策场景】提供了可执行依据。",
+        },
+      },
+      {
+        id: 2,
+        type: "The Vague Dreamer",
+        title: "动机泛泛而谈",
+        quote: "我从小就对人机交互充满热情，科技改变生活，所以我选择了这个专业。",
+        harshComment:
+          "这种开头信息密度太低，不能支持学术评估。招生官需要看到的是具体触发点与问题意识，而不是口号式动机。",
+        questions: ["是哪门课、哪次实验或哪段实习中的具体冲突，让你明确转向这个专业？"],
+        example:
+          "在一次适老化应用调研中，我发现现有无障碍设计忽略了认知负荷差异，这推动我进一步研究人因工程与交互评估。",
+        color: "amber",
+        suggestion: {
+          action: "replace",
+          text: "在【课程/项目名称】中，我通过【研究方法，如访谈/可用性测试】发现【具体痛点】是影响用户体验的关键因素。这一发现促使我将研究重心转向【目标领域】，并希望在硕士阶段进一步系统训练【方法或能力模块】。",
+        },
+      },
+      {
+        id: 3,
+        type: "Strong Evidence",
+        title: "量化结果表达有效",
+        quote: "结果显示，关键任务完成率由 62% 提升到 81%，高压力用户组的误触率下降 27%。",
+        harshComment:
+          "这句是加分项：方法-指标-结果链条完整，招生官可以快速判断你具备证据驱动的分析能力。建议保留并前置。",
+        questions: ["这句建议保留。可再补一句：该结果如何引出你申请该项目的下一步研究目标？"],
+        example:
+          "可强化为：该结果促使我进一步关注高压力场景下的认知负荷建模，并希望在硕士阶段系统训练实验设计与评估框架。",
+        color: "green",
+        suggestion: {
+          action: "replace",
+          text: "结果显示，关键任务完成率由【原始值】提升到【结果值】，【辅助指标】下降【比例】。这说明【你的方法/策略】在【场景】中具有可验证效果，也进一步引出我希望在硕士阶段深入研究【具体研究方向】。",
+        },
+      },
+    ],
+    []
+  );
+  const activeCritique = demoCritiques.find((c) => c.id === activeCritiqueId) ?? demoCritiques[0];
+  const visibleCritiques = useMemo(
+    () => demoCritiques.filter((c) => (critiqueStatus[c.id] ?? "open") === "open"),
+    [critiqueStatus, demoCritiques]
+  );
+  const critiqueStats = useMemo(() => {
+    const total = visibleCritiques.length;
+    const resolved = demoCritiques.filter((c) => critiqueStatus[c.id] === "resolved").length;
+    const dismissed = demoCritiques.filter((c) => critiqueStatus[c.id] === "dismissed").length;
+    const open = total;
+    return { total, resolved, dismissed, open };
+  }, [critiqueStatus, demoCritiques, visibleCritiques]);
+  const annotatedDraftPreview = useMemo(() => {
+    const draft = content.trim();
+    if (!draft) return null;
+    const paragraphs = draft.split(/\n{2,}/).filter(Boolean);
+    let totalHits = 0;
+    let globalOffset = 0;
+    let rangeCursor = 0;
+    const rendered = paragraphs.map((para, pIdx) => {
+      const pieces: React.JSX.Element[] = [];
+      let cursor = 0;
+      let pieceIdx = 0;
+      const paraStart = globalOffset;
+      const paraEnd = paraStart + para.length;
+      while (cursor < para.length) {
+        const nextRange = critiqueRanges.slice(rangeCursor).find((r) => r.start >= paraStart && r.start < paraEnd);
+        if (!nextRange) {
+          pieces.push(<span key={`txt-${pIdx}-${pieceIdx++}`}>{para.slice(cursor)}</span>);
+          break;
+        }
+        const localStart = nextRange.start - paraStart;
+        const localEnd = nextRange.end - paraStart;
+        if (localStart > cursor) {
+          pieces.push(<span key={`txt-${pIdx}-${pieceIdx++}`}>{para.slice(cursor, localStart)}</span>);
+        }
+        const isActive = activeCritiqueId === nextRange.critique.id;
+        totalHits += 1;
+        pieces.push(
+          <button
+            key={`hl-${pIdx}-${pieceIdx++}`}
+            type="button"
+            onClick={() => focusCritique(nextRange.critique.id, true)}
+            onMouseEnter={() => setHoveredCritiqueId(nextRange.critique.id)}
+            onMouseLeave={() => setHoveredCritiqueId((curr) => (curr === nextRange.critique.id ? null : curr))}
+            className={`rounded px-0.5 text-left transition-colors ${
+              nextRange.critique.color === "red"
+                ? isActive
+                  ? "bg-red-200/80"
+                  : "bg-red-100/70 hover:bg-red-200/70"
+                : nextRange.critique.color === "amber"
+                  ? isActive
+                    ? "bg-amber-200/80"
+                    : "bg-amber-100/70 hover:bg-amber-200/70"
+                  : isActive
+                    ? "bg-emerald-200/80"
+                    : "bg-emerald-100/70 hover:bg-emerald-200/70"
+            } ${hoveredCritiqueId === nextRange.critique.id ? "ring-1 ring-primary/40" : ""}`}
+          >
+            {para.slice(localStart, localEnd)}
+          </button>
+        );
+        cursor = localEnd;
+        rangeCursor += 1;
+      }
+      globalOffset = paraEnd + 2;
+      return (
+        <p key={`p-${pIdx}`} className="text-sm leading-7 text-foreground/90">
+          {pieces}
+        </p>
+      );
+    });
+    if (totalHits > 0) return rendered;
+    return [
+      <p key="fallback-hl" className="text-sm leading-7 text-foreground/90">
+        <button
+          type="button"
+          onClick={() => focusCritique(2, true)}
+          onMouseEnter={() => setHoveredCritiqueId(2)}
+          onMouseLeave={() => setHoveredCritiqueId((curr) => (curr === 2 ? null : curr))}
+          className={`rounded px-0.5 text-left transition-colors ${
+            activeCritiqueId === 2 ? "bg-amber-200/80" : "bg-amber-100/70 hover:bg-amber-200/70"
+          } ${hoveredCritiqueId === 2 ? "ring-1 ring-primary/40" : ""}`}
+        >
+          {demoCritiques[1]?.quote}
+        </button>
+        {" "}
+        <button
+          type="button"
+          onClick={() => focusCritique(1, true)}
+          onMouseEnter={() => setHoveredCritiqueId(1)}
+          onMouseLeave={() => setHoveredCritiqueId((curr) => (curr === 1 ? null : curr))}
+          className={`rounded px-0.5 text-left transition-colors ${
+            activeCritiqueId === 1 ? "bg-red-200/80" : "bg-red-100/70 hover:bg-red-200/70"
+          } ${hoveredCritiqueId === 1 ? "ring-1 ring-primary/40" : ""}`}
+        >
+          {demoCritiques[0]?.quote}
+        </button>
+        {" "}
+        <button
+          type="button"
+          onClick={() => focusCritique(3, true)}
+          onMouseEnter={() => setHoveredCritiqueId(3)}
+          onMouseLeave={() => setHoveredCritiqueId((curr) => (curr === 3 ? null : curr))}
+          className={`rounded px-0.5 text-left transition-colors ${
+            activeCritiqueId === 3 ? "bg-emerald-200/80" : "bg-emerald-100/70 hover:bg-emerald-200/70"
+          } ${hoveredCritiqueId === 3 ? "ring-1 ring-primary/40" : ""}`}
+        >
+          {demoCritiques[2]?.quote}
+        </button>
+      </p>,
+    ];
+  }, [activeCritiqueId, content, critiqueRanges, demoCritiques]);
   const draftVersions = useMemo(
     () => (programId ? listDraftVersions(programId, kind) : []),
     [programId, kind, versionRefreshTick]
@@ -346,21 +726,140 @@ export default function WriteDocumentPage() {
     setVersionDialogOpen(false);
   }
 
+  function runInitialDraftDemo() {
+    if (demoState === "loading") return;
+    setDemoState("loading");
+    if (demoTimer.current != null) window.clearTimeout(demoTimer.current);
+    demoTimer.current = window.setTimeout(() => {
+      const range = getDemoWordRange(pair?.school.nameEn);
+      const targetMin = range.min;
+      const zhDraft = buildZhDemoDraft(targetMin);
+      const enDraft = buildEnDemoDraft(targetMin);
+      const draftForEditor = activeLanguage === "en" ? enDraft : zhDraft;
+      setContent(draftForEditor);
+      setZhContent(zhDraft);
+      setEnContent(enDraft);
+      setCurrentStage("refine_draft");
+      setDemoState("done");
+      demoTimer.current = null;
+    }, 1800);
+  }
+
+  function applyCritiqueSuggestion(critique: DemoCritique) {
+    if (!critique.suggestion || critique.suggestion.action !== "replace") return;
+    setApplyingCritiqueId(critique.id);
+    setApplyProgress(8);
+    if (applyTimer.current != null) window.clearTimeout(applyTimer.current);
+    applyTimer.current = window.setTimeout(() => setApplyProgress(36), 120);
+    window.setTimeout(() => setApplyProgress(68), 260);
+    window.setTimeout(() => setApplyProgress(92), 420);
+    const target = critiqueRanges.find((r) => r.critique.id === critique.id);
+    const replacement = critique.suggestion.text;
+    if (!target) {
+      window.setTimeout(() => {
+        const next = `${content.trim()}\n\n${replacement}`;
+        updateContentAndLanguage(next);
+        setCritiqueStatus((prev) => ({ ...prev, [critique.id]: "resolved" }));
+        setFeedbackText(`已插入AI范例：${critique.title}`);
+        setApplyProgress(100);
+        window.setTimeout(() => {
+          setApplyingCritiqueId(null);
+          setApplyProgress(0);
+        }, 160);
+      }, 520);
+      return;
+    }
+    window.setTimeout(() => {
+      const next = `${content.slice(0, target.start)}${replacement}${content.slice(target.end)}`;
+      const delta = replacement.length - (target.end - target.start);
+      updateContentAndLanguage(next, { updateRanges: false });
+      setCritiqueRanges((prev) =>
+        prev.map((r) => {
+          if (r.critique.id === critique.id) {
+            return { ...r, end: r.start + replacement.length };
+          }
+          if (r.start > target.start) {
+            return { ...r, start: r.start + delta, end: r.end + delta };
+          }
+          return r;
+        })
+      );
+      setCritiqueStatus((prev) => ({ ...prev, [critique.id]: "resolved" }));
+      setFeedbackText(`已应用建议：${critique.title}`);
+      setApplyProgress(100);
+      window.setTimeout(() => {
+        setApplyingCritiqueId(null);
+        setApplyProgress(0);
+      }, 160);
+    }, 520);
+  }
+
+  function dismissCritique(id: number) {
+    setCritiqueStatus((prev) => ({ ...prev, [id]: "dismissed" }));
+    const c = demoCritiques.find((item) => item.id === id);
+    setFeedbackText(`已忽略建议：${c?.title ?? "未命名建议"}`);
+  }
+
+  function runCritiqueScan() {
+    if (scanState === "scanning") return;
+    setScanState("scanning");
+    window.setTimeout(() => {
+      setCritiqueRanges(buildCritiqueRanges(content, demoCritiques));
+      setCritiqueStatus((prev) => {
+        const next = { ...prev };
+        demoCritiques.forEach((c) => {
+          if (!next[c.id]) next[c.id] = "open";
+        });
+        return next;
+      });
+      setFeedbackText("已完成重扫，建议状态已更新");
+      setScanState("idle");
+    }, 500);
+  }
+
   useEffect(() => {
     if (!pair || !questionnaireLoaded) return;
     const pid = pair.program.id;
     if (seededProgramRef.current === pid) return;
     seededProgramRef.current = pid;
+    setSeedReady(false);
     const ctx = draftContextFromPair(pair);
     const seeded = getResolvedDraftContent(pid, "ps", ctx, questionnaireData);
     setZhContent(seeded);
     setEnContent("");
     setActiveLanguage("zh-CN");
     setContent(seeded);
-  }, [pair, questionnaireLoaded, questionnaireData]);
+    const existing = getDraft(pid, kind);
+    const workflow = existing?.workflow;
+    if (workflow) {
+      setSelectedMaterialIds(workflow.selectedMaterialIds ?? []);
+      setMatchedRequirementIds(workflow.matchedRequirementIds ?? []);
+      setParagraphCards(workflow.paragraphBindings ?? []);
+      setIntentHistory(workflow.intentHistory ?? []);
+      setSourceTrace(workflow.sourceTrace ?? []);
+      setCurrentStage(workflow.microTaskState?.currentStage ?? "select_materials");
+    } else {
+      const recommended = recommendMaterialIds(
+        materialPool,
+        buildProgramSignalOptions(pair),
+        pair.program.matchReasons ?? []
+      );
+      setSelectedMaterialIds(recommended);
+      setMatchedRequirementIds([]);
+      setCustomSignals([]);
+      setCustomSignalInput("");
+      setParagraphCards([]);
+      setIntentHistory([]);
+      setSourceTrace([]);
+      setCurrentStage("select_materials");
+    }
+    setStructure("classic");
+    setMaterialView("all");
+    setSeedReady(true);
+  }, [kind, materialPool, pair, questionnaireLoaded, questionnaireData]);
 
   useEffect(() => {
-    if (!pair) return;
+    if (!pair || !questionnaireLoaded || !seedReady) return;
     setSaveState("saving");
     const debounce = window.setTimeout(() => {
       saveDraft(pair.program.id, kind, content);
@@ -369,13 +868,86 @@ export default function WriteDocumentPage() {
       saveIdleTimer.current = window.setTimeout(() => setSaveState("idle"), 1600);
     }, 500);
     return () => window.clearTimeout(debounce);
-  }, [content, pair]);
+  }, [content, pair, questionnaireLoaded, seedReady]);
+
+  useEffect(() => {
+    if (!pair || !seedReady) return;
+    const completedStages: MicroTaskStage[] = [];
+    if (step1Done) completedStages.push("select_materials");
+    if (step2Done) completedStages.push("match_requirements");
+    if (step3Done) completedStages.push("bind_paragraphs");
+    if (step4Done) completedStages.push("refine_draft");
+    const workflow: DraftWorkflowState = {
+      microTaskState: {
+        currentStage,
+        completedStages,
+      },
+      selectedMaterialIds,
+      matchedRequirementIds,
+      paragraphBindings: paragraphCards,
+      intentHistory,
+      sourceTrace,
+      recommendationCache: recommendedMaterialIds,
+    };
+    saveDraftWorkflow(pair.program.id, kind, workflow);
+  }, [
+    currentStage,
+    intentHistory,
+    kind,
+    matchedRequirementIds,
+    pair,
+    paragraphCards,
+    recommendedMaterialIds,
+    seedReady,
+    selectedMaterialIds,
+    sourceTrace,
+    step1Done,
+    step2Done,
+    step3Done,
+    step4Done,
+  ]);
 
   useEffect(() => {
     return () => {
       if (saveIdleTimer.current != null) window.clearTimeout(saveIdleTimer.current);
+      if (defaultDocTimer.current != null) window.clearTimeout(defaultDocTimer.current);
+      if (demoTimer.current != null) window.clearTimeout(demoTimer.current);
+      if (flashTimer.current != null) window.clearTimeout(flashTimer.current);
+      if (feedbackTimer.current != null) window.clearTimeout(feedbackTimer.current);
+      if (applyTimer.current != null) window.clearTimeout(applyTimer.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (guideCritiqueId == null) return;
+    const node = critiqueCardRefs.current[guideCritiqueId];
+    if (node) {
+      node.scrollIntoView({ behavior: "smooth", block: "center" });
+      setFlashCritiqueId(guideCritiqueId);
+      if (flashTimer.current != null) window.clearTimeout(flashTimer.current);
+      flashTimer.current = window.setTimeout(() => {
+        setFlashCritiqueId(null);
+        flashTimer.current = null;
+      }, 500);
+    }
+    setGuideCritiqueId(null);
+  }, [guideCritiqueId]);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setCritiqueRanges(buildCritiqueRanges(content, demoCritiques));
+    }, 180);
+    return () => window.clearTimeout(t);
+  }, [content, demoCritiques]);
+
+  useEffect(() => {
+    if (!feedbackText) return;
+    if (feedbackTimer.current != null) window.clearTimeout(feedbackTimer.current);
+    feedbackTimer.current = window.setTimeout(() => {
+      setFeedbackText(null);
+      feedbackTimer.current = null;
+    }, 1800);
+  }, [feedbackText]);
 
   const notAdded = addedIdsReady && !addedIds.includes(programId);
   const canUseEditor = !notAdded || hasLocalDraft;
@@ -388,38 +960,41 @@ export default function WriteDocumentPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <GuestBanner />
-
-      <header className="sticky top-8 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="mx-auto flex h-14 max-w-4xl items-center justify-between gap-3 px-4 sm:px-6">
-          <div className="flex min-w-0 items-center gap-2">
-            <Button type="button" variant="ghost" size="icon" className="shrink-0" asChild>
-              <Link href="/workspace" aria-label="返回工作台">
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-            </Button>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-foreground">文书草稿</p>
-              {pair ? (
-                <p className="truncate text-xs text-muted-foreground">
-                  {pair.school.nameEn} · {pair.program.nameEn}
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground">—</p>
+      <div className="sticky top-0 z-50">
+        <div className="flex h-8 items-center justify-center border-b border-border bg-muted">
+          <p className="text-xs text-muted-foreground">游客模式 · 数据仅本地保存</p>
+        </div>
+        <header className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+          <div className="mx-auto flex h-14 max-w-4xl items-center justify-between gap-3 px-4 sm:px-6">
+            <div className="flex min-w-0 items-center gap-2">
+              <Button type="button" variant="ghost" size="icon" className="shrink-0" asChild>
+                <Link href="/workspace" aria-label="返回工作台">
+                  <ArrowLeft className="h-4 w-4" />
+                </Link>
+              </Button>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-foreground">文书草稿</p>
+                {pair ? (
+                  <p className="truncate text-xs text-muted-foreground">
+                    {pair.school.nameEn} · {pair.program.nameEn}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">—</p>
+                )}
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+              {saveState === "saving" && <span>保存中…</span>}
+              {saveState === "saved" && (
+                <span className="flex items-center gap-1 text-foreground">
+                  <Check className="h-3.5 w-3.5" />
+                  已保存
+                </span>
               )}
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-            {saveState === "saving" && <span>保存中…</span>}
-            {saveState === "saved" && (
-              <span className="flex items-center gap-1 text-foreground">
-                <Check className="h-3.5 w-3.5" />
-                已保存
-              </span>
-            )}
-          </div>
-        </div>
-      </header>
+        </header>
+      </div>
 
       <main className="px-4 py-6 sm:px-6 sm:py-8">
         {missingMatch && (
@@ -462,352 +1037,230 @@ export default function WriteDocumentPage() {
         )}
 
         {pair && addedIdsReady && questionnaireLoaded && canUseEditor && (
-          <>
+          <div className="mx-auto max-w-7xl">
             {notAdded && hasLocalDraft && (
               <p className="mb-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                该项目未在工作台列表中，仍可查看与编辑已保存草稿；需要一并管理申请进度时请先在匹配页加入工作台。
+                该项目未在工作台列表中，当前仅编辑已保存草稿。
               </p>
             )}
-            <div className="mx-auto grid max-w-[1400px] gap-4 md:grid-cols-[280px_minmax(0,1fr)] lg:grid-cols-[320px_minmax(0,1fr)]">
-              <aside className="space-y-3">
-                <section className="flex min-h-[70vh] flex-col rounded-lg border border-border bg-card p-3">
-                  <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
-                    <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full border text-xs font-semibold ${step1Done ? "border-primary bg-primary text-primary-foreground" : "border-border bg-muted/40 text-foreground"}`}>1</span>
-                    挑选个人背景素材
-                  </p>
-                  {materialPool.length === 0 ? (
-                    <p className="flex-1 text-xs text-muted-foreground">问卷素材较少，建议先补充问卷信息。</p>
-                  ) : (
-                    <ScrollArea className="min-h-0 flex-1 pr-2">
-                      <div className="space-y-1.5">
-                        {materialPool.map((m) => {
-                          const active = selectedMaterialIds.includes(m.id);
-                          return (
-                            <button
-                              key={m.id}
-                              type="button"
-                              title={m.detail}
-                              onClick={() =>
-                                setSelectedMaterialIds((prev) =>
-                                  prev.includes(m.id) ? prev.filter((id) => id !== m.id) : [...prev, m.id]
-                                )
-                              }
-                              className={`w-full rounded-md border px-2.5 py-2 text-left ${active ? "border-primary/40 bg-muted" : "border-border/70 hover:bg-muted/35"}`}
-                            >
-                              <p className="text-xs font-medium">{m.title}</p>
-                              <p className="mt-1 line-clamp-3 text-ui-label leading-relaxed text-muted-foreground">
-                                {m.detail}
-                              </p>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </ScrollArea>
-                  )}
-                </section>
-
-                <section className="rounded-lg border border-border bg-card p-3">
-                  <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
-                    <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full border text-xs font-semibold ${step2Done ? "border-primary bg-primary text-primary-foreground" : "border-border bg-muted/40 text-foreground"}`}>2</span>
-                    选择文书结构
-                  </p>
-                  <div className="space-y-1.5">
-                    {[
-                      { id: "classic" as const, label: "经典结构" },
-                      { id: "story" as const, label: "故事结构" },
-                      { id: "impact" as const, label: "成果结构" },
-                    ].map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => setStructure(item.id)}
-                        className={`w-full rounded-md border px-2.5 py-2 text-left text-xs ${structure === item.id ? "border-primary/40 bg-muted text-foreground" : "border-border/70 text-muted-foreground hover:bg-muted/35"}`}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                </section>
-
-                {step1Done && step2Done && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="w-full justify-start gap-1.5"
-                    onClick={() => {
-                      const ctx = draftContextFromPair(pair);
-                      const next = buildGeneratedPs(
-                        ctx,
-                        structure!,
-                        materialPool.filter((m) => selectedMaterialIds.includes(m.id)),
-                        questionnaireData
-                      );
-                      setZhContent(next);
-                      setEnContent("");
-                      setActiveLanguage("zh-CN");
-                      setContent(next);
-                    }}
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    生成PS
-                  </Button>
-                )}
-
-                <section className="rounded-lg border border-border bg-card p-3">
-                  <div className="rounded-md border border-border/70 bg-muted/20 px-2.5 py-2">
-                    <p className="text-ui-label font-medium text-foreground">已知限制</p>
-                    <p className="mt-1 text-ui-label leading-relaxed text-muted-foreground">
-                      当前仅支持按目标领域快速起稿，暂不支持识别每所院校的细分文书偏好。字数、语气、格式与院校特殊要求请手动调整。
-                    </p>
-                  </div>
-                </section>
-              </aside>
-
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
               <section className="rounded-lg border border-border bg-card">
                 <div className="flex items-center justify-between border-b border-border px-4 py-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">个人陈述（PS）</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {pair.school.nameEn} · {pair.program.nameEn}
-                    </p>
                   </div>
-                  <div className="text-right text-xs text-muted-foreground">
-                    <p>
-                      字符 {totalCharsNoSpace} · 中文 {zhCharCount} · 英文词 {enWordCount}
-                    </p>
-                    {translateState === "translating" && <p>翻译中…</p>}
-                    {saveState === "saving" && <span>保存中…</span>}
-                    {saveState === "saved" && (
-                      <span className="inline-flex items-center gap-1 text-foreground">
-                        <Check className="h-3.5 w-3.5" />
-                        已保存
-                      </span>
-                    )}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      aria-label={activeLanguage === "zh-CN" ? "切换到英文" : "切换到中文"}
+                      title={activeLanguage === "zh-CN" ? "切换到英文" : "切换到中文"}
+                      onClick={toggleLanguage}
+                      disabled={translateState === "translating"}
+                    >
+                      {translateState === "translating" ? (
+                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Languages className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <div className="text-right text-xs text-muted-foreground">
+                      <p>{activeLanguage === "zh-CN" ? `字数 ${totalCharsNoSpace}` : `Words ${enWordCount}`}</p>
+                      {saveState === "saving" && <span>保存中…</span>}
+                      {saveState === "saved" && (
+                        <span className="inline-flex items-center gap-1 text-foreground">
+                          <Check className="h-3.5 w-3.5" />
+                          已保存
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="p-4">
-                  <div className="mb-3 flex items-center gap-2">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          aria-label="重新生成PS提纲"
-                          onClick={() => {
-                            const ctx = draftContextFromPair(pair);
-                            const next = getResolvedDraftContent(pair.program.id, kind, ctx, questionnaireData);
-                            setZhContent(next);
-                            setEnContent("");
-                            setActiveLanguage("zh-CN");
-                            setContent(next);
-                          }}
-                        >
-                          <Plus className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">重新生成PS提纲</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          aria-label={activeLanguage === "zh-CN" ? "切换到英文" : "切换到中文"}
-                          disabled={translateState === "translating" || !zhContent.trim()}
-                          onClick={toggleLanguage}
-                        >
-                          <Image
-                            src="/icons/document-translate.png"
-                            alt=""
-                            width={16}
-                            height={16}
-                            className="h-4 w-4 object-contain"
-                            aria-hidden
-                          />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">
-                        {activeLanguage === "zh-CN" ? "切换到英文" : "切换到中文"}
-                      </TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={!content.trim()}
-                          onClick={handleSaveVersion}
-                        >
-                          保存版本
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">将当前文稿保存为版本快照</TooltipContent>
-                    </Tooltip>
-                    <Dialog open={versionDialogOpen} onOpenChange={setVersionDialogOpen}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <DialogTrigger asChild>
-                            <Button type="button" variant="outline" size="icon" aria-label="版本记录">
-                              <FileText className="h-4 w-4" aria-hidden />
-                            </Button>
-                          </DialogTrigger>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom">版本记录</TooltipContent>
-                      </Tooltip>
-                      <DialogContent className="max-w-xl">
-                        <DialogHeader>
-                          <DialogTitle>版本记录</DialogTitle>
-                          <DialogDescription>
-                            每次点击「保存版本」会创建一个快照，可随时恢复到该版本。
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="max-h-[60vh] space-y-2 overflow-auto pr-1">
-                          {draftVersions.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">暂无版本，先点击「保存版本」。</p>
-                          ) : (
-                            draftVersions.map((v, idx) => (
-                              <div key={v.id} className="rounded-md border border-border/70 bg-muted/20 p-2.5">
-                                <div className="flex items-center justify-between gap-2">
-                                  <p className="text-xs font-medium text-foreground">
-                                    版本 {draftVersions.length - idx} ·{" "}
-                                    {new Date(v.createdAt).toLocaleString("zh-CN", { hour12: false })}
-                                  </p>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => restoreVersion(v.content)}
-                                  >
-                                    恢复此版本
-                                  </Button>
-                                </div>
-                                <p className="mt-1 line-clamp-3 text-ui-label leading-relaxed text-muted-foreground">
-                                  {v.content.replace(/\s+/g, " ").trim()}
-                                </p>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </DialogContent>
-                    </Dialog>
-                    <Dialog
-                      onOpenChange={(open) => {
-                        if (open) setDraftPreviewScene("current");
-                      }}
-                    >
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <DialogTrigger asChild>
-                            <Button type="button" variant="outline" size="icon" aria-label="预览范例">
-                              <Eye className="h-4 w-4" aria-hidden />
-                            </Button>
-                          </DialogTrigger>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom">预览范例</TooltipContent>
-                      </Tooltip>
-                      <DialogContent className="flex max-h-[min(92vh,760px)] max-w-2xl flex-col gap-3">
-                        <DialogHeader>
-                          <DialogTitle>文书预览</DialogTitle>
-                          <DialogDescription className="text-left text-sm leading-relaxed">
-                            当前为「个人陈述（PS）」。切换下方场景可对照：你本机问卷、几份虚构但信息完整的演示问卷、以及「套用模版」替换抬头后的效果。均为只读预览，不会写入编辑框。
-                          </DialogDescription>
-                        </DialogHeader>
-                        {draftPreviewPanel ? (
-                          <div className="flex min-h-0 flex-1 flex-col gap-3">
-                            <div className="flex flex-wrap gap-1.5">
-                              {DOCUMENT_DRAFT_PREVIEW_SCENES.map((s) => (
-                                <Button
-                                  key={s.id}
-                                  type="button"
-                                  size="sm"
-                                  variant={draftPreviewScene === s.id ? "default" : "outline"}
-                                  className="h-auto min-h-8 max-w-full whitespace-normal px-2.5 py-1.5 text-left text-xs leading-snug"
-                                  onClick={() => setDraftPreviewScene(s.id)}
-                                >
-                                  {s.label}
-                                </Button>
-                              ))}
-                            </div>
-                            <p className="text-xs leading-relaxed text-muted-foreground">
-                              {
-                                DOCUMENT_DRAFT_PREVIEW_SCENES.find((s) => s.id === draftPreviewScene)
-                                  ?.description
-                              }
-                            </p>
-                            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-                              {draftPreviewPanel.blocks.map((block, i) => (
-                                <div key={i} className="flex min-h-0 flex-1 flex-col gap-1.5">
-                                  <p className="shrink-0 text-xs font-medium text-muted-foreground">
-                                    {block.label}
-                                  </p>
-                                  <ScrollArea className="max-h-[min(42vh,280px)] rounded-md border border-border bg-muted/25 p-3 sm:max-h-[min(38vh,260px)]">
-                                    <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground">
-                                      {block.text}
-                                    </pre>
-                                  </ScrollArea>
-                                </div>
-                              ))}
-                            </div>
-                            <p className="text-ui-label leading-relaxed text-muted-foreground">
-                              标注「示例」的问卷人物与经历均为虚构演示，与任何真实申请人无关。
-                            </p>
-                          </div>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">加载中…</p>
-                        )}
-                      </DialogContent>
-                    </Dialog>
+                  <div className="mb-2 space-y-2">
+                    {annotatedDraftPreview}
                   </div>
-                  {content.trim() ? (
-                    <Textarea
-                      value={content}
-                      onChange={(e) => {
-                        const next = e.target.value;
-                        setContent(next);
-                        if (activeLanguage === "zh-CN") setZhContent(next);
-                        if (activeLanguage === "en") setEnContent(next);
-                      }}
-                      className="min-h-[70vh] resize-y border-border/80 font-mono text-sm leading-relaxed shadow-none"
-                      spellCheck={false}
-                    />
-                  ) : (
-                    <div className="flex min-h-[70vh] flex-col items-center justify-center rounded-md border border-dashed border-border bg-muted/15 px-6 text-center">
-                      <div className="mb-4 rounded-full bg-muted p-3">
-                        <Sparkles className="h-6 w-6 text-muted-foreground" />
-                      </div>
-                      <p className="text-sm font-medium">即刻开始创作</p>
-                      <p className="mt-1 max-w-md text-xs leading-relaxed text-muted-foreground">
-                        可先用默认提纲自动填充，再按你的语气和经历进行精修。
-                      </p>
+                  <Textarea
+                    value={content}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setContent(next);
+                      if (activeLanguage === "zh-CN") setZhContent(next);
+                      if (activeLanguage === "en") setEnContent(next);
+                    }}
+                    placeholder="开始撰写你的文书。"
+                    className="min-h-[72vh] resize-y border-border/80 font-mono text-sm leading-relaxed shadow-none"
+                    spellCheck={false}
+                  />
+                  <div className="mt-3 rounded-md border border-border/70 bg-muted/20 px-3 py-2">
+                    <div className="flex items-center justify-end">
                       <Button
                         type="button"
-                        className="mt-4"
+                        size="icon"
+                        variant="outline"
+                        disabled={!content.trim()}
+                        aria-label="重新生成"
+                        title="重新生成"
                         onClick={() => {
-                          const ctx = draftContextFromPair(pair);
-                          const next = buildPsDraft(ctx, questionnaireData);
-                          setZhContent(next);
-                          setEnContent("");
-                          setActiveLanguage("zh-CN");
+                          const next = applyAiSuggestionPreset(content, "academic", "fit", "balanced");
                           setContent(next);
+                          if (activeLanguage === "zh-CN") setZhContent(next);
+                          if (activeLanguage === "en") setEnContent(next);
                         }}
                       >
-                        <Plus className="mr-1.5 h-4 w-4" />
-                        生成PS
+                        <Sparkles className="h-4 w-4" />
                       </Button>
                     </div>
-                  )}
-                </div>
-                <div className="border-t border-border/70 px-4 py-2">
-                  <p className="text-ui-label leading-relaxed text-muted-foreground">
-                    提示：本工具用于提速起稿与结构整理，不替代院校官方要求。请在提交前核对字数限制、题目要求、语气风格与事实细节。
-                  </p>
+                  </div>
                 </div>
               </section>
+
+              <aside className="space-y-2 lg:sticky lg:top-24 lg:self-start">
+                <div className="rounded-lg border border-border bg-card px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-foreground">主编批注</p>
+                    <Button type="button" size="sm" variant="outline" onClick={runCritiqueScan} disabled={scanState === "scanning"}>
+                      {scanState === "scanning" ? "重扫中..." : "重扫"}
+                    </Button>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    进度：{critiqueStats.resolved}/{critiqueStats.total} 已处理，{critiqueStats.open} 待处理
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    <span className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                      待处理 {critiqueStats.open}
+                    </span>
+                    <span className="rounded border border-border px-1.5 py-0.5 text-[11px] text-emerald-700">
+                      已处理 {critiqueStats.resolved}
+                    </span>
+                    <span className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                      已忽略 {critiqueStats.dismissed}
+                    </span>
+                  </div>
+                  {applyingCritiqueId != null && (
+                    <div className="mt-2">
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full bg-primary transition-all duration-200 ease-out"
+                          style={{ width: `${applyProgress}%` }}
+                        />
+                      </div>
+                      <p className="mt-1 text-[11px] text-muted-foreground">AI 正在生成范例句...</p>
+                    </div>
+                  )}
+                  {feedbackText && <p className="mt-2 text-xs text-primary">{feedbackText}</p>}
+                </div>
+                <AnimatePresence initial={false}>
+                  {visibleCritiques.map((critique) => {
+                    const active = critique.id === activeCritiqueId;
+                    const danger = critique.color === "red";
+                    const warning = critique.color === "amber";
+                    const status = critiqueStatus[critique.id] ?? "open";
+                    const hovering = hoveredCritiqueId === critique.id;
+                    return (
+                      <motion.div
+                        key={critique.id}
+                        layout
+                        ref={(el) => {
+                          critiqueCardRefs.current[critique.id] = el;
+                        }}
+                        initial={{ opacity: 0, x: 16 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: "100%", transition: { duration: 0.22, ease: "easeIn" } }}
+                        transition={{ duration: 0.2 }}
+                        whileHover={{ scale: 1.02 }}
+                        className={`w-full rounded-lg border bg-card p-3 text-left transition-all duration-200 ease-out ${
+                          active ? "border-primary/50 ring-1 ring-primary/30" : "border-border hover:bg-muted/20"
+                        } ${flashCritiqueId === critique.id ? "bg-primary/10 ring-2 ring-primary/40" : ""} ${
+                          hovering ? "shadow-lg bg-primary/5" : "shadow-sm"
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => focusCritique(critique.id)}
+                          onMouseEnter={() => setHoveredCritiqueId(critique.id)}
+                          onMouseLeave={() => setHoveredCritiqueId((curr) => (curr === critique.id ? null : curr))}
+                          className="w-full text-left"
+                        >
+                          <div className="flex items-center justify-between gap-2 text-xs">
+                            <div className="flex items-center gap-2">
+                              {danger ? (
+                                <XCircle className="h-3.5 w-3.5 text-destructive" />
+                              ) : warning ? (
+                                <TriangleAlert className="h-3.5 w-3.5 text-amber-600" />
+                              ) : (
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                              )}
+                              <span
+                                className={
+                                  danger ? "text-destructive" : warning ? "text-amber-700" : "text-emerald-700"
+                                }
+                              >
+                                {critique.type}
+                              </span>
+                            </div>
+                            <span className="text-[11px] text-muted-foreground">
+                              {status === "resolved" ? "已处理" : status === "dismissed" ? "已忽略" : "待处理"}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-sm font-medium text-foreground">{critique.title}</p>
+                          <p className="mt-2 rounded-md bg-muted/40 px-2 py-1.5 text-sm leading-6 text-foreground">
+                            {critique.questions[0]}
+                          </p>
+                        </button>
+                        <motion.div
+                          initial={false}
+                          animate={
+                            active
+                              ? { height: "auto", opacity: 1, y: 0 }
+                              : { height: 0, opacity: 0, y: 10 }
+                          }
+                          transition={{ duration: 0.3, ease: "easeOut" }}
+                          className="mt-2 overflow-hidden"
+                        >
+                          <p className="mb-2 rounded-md border border-primary/20 bg-primary/5 px-2 py-1 text-xs text-foreground">
+                            {critique.example}
+                          </p>
+                          <div className="flex items-center gap-2">
+                            {critique.suggestion ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={status === "resolved" || applyingCritiqueId === critique.id}
+                                onClick={() => applyCritiqueSuggestion(critique)}
+                              >
+                                {applyingCritiqueId === critique.id ? "生成中..." : "Accept"}
+                              </Button>
+                            ) : (
+                              <Button type="button" size="sm" variant="outline" disabled>
+                                无需改动
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              disabled={status === "resolved" || applyingCritiqueId === critique.id}
+                              onClick={() => dismissCritique(critique.id)}
+                            >
+                              Dismiss
+                            </Button>
+                          </div>
+                        </motion.div>
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+                {critiqueStats.open === 0 && (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                    已完成本轮批注处理。你可以继续润色正文后点击“重扫”获取下一轮建议。
+                  </div>
+                )}
+              </aside>
             </div>
-          </>
+          </div>
         )}
       </main>
     </div>
