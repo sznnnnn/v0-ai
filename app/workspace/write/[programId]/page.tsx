@@ -51,6 +51,7 @@ import {
   buildDraftSeed,
   setDefaultPs,
   getResolvedDraftContent,
+  mergeDraftTemplateWithContext,
   getDraftExamplePreview,
   listDraftVersions,
   saveDraft,
@@ -377,6 +378,7 @@ export default function WriteDocumentPage() {
   const { result, isLoaded: matchLoaded } = useMatchResult();
   const { data: questionnaireData, isLoaded: questionnaireLoaded } = useQuestionnaire();
   const forceFresh = searchParams.get("mode") === "fresh";
+  const cloneFromProgramId = searchParams.get("cloneFrom");
 
   const [addedIds, setAddedIds] = useState<string[]>([]);
   const [addedIdsReady, setAddedIdsReady] = useState(false);
@@ -864,9 +866,12 @@ export default function WriteDocumentPage() {
     seededProgramRef.current = pid;
     setSeedReady(false);
     const ctx = draftContextFromPair(pair);
+    const cloneSource = cloneFromProgramId ? getDraft(cloneFromProgramId, "ps") : null;
     const seeded = forceFresh
       ? buildPsDraftFromNarrativeAnswers(ctx, questionnaireData, existing?.workflow?.narrativeAnswers)
-      : getResolvedDraftContent(pid, "ps", ctx, questionnaireData);
+      : cloneSource?.content?.trim()
+        ? mergeDraftTemplateWithContext("ps", ctx, cloneSource.content)
+        : getResolvedDraftContent(pid, "ps", ctx, questionnaireData);
     setZhContent(seeded);
     setEnContent("");
     setActiveLanguage("zh-CN");
@@ -898,7 +903,7 @@ export default function WriteDocumentPage() {
     setStructure("classic");
     setMaterialView("all");
     setSeedReady(true);
-  }, [forceFresh, kind, materialPool, pair, questionnaireLoaded, questionnaireData]);
+  }, [cloneFromProgramId, forceFresh, kind, materialPool, pair, questionnaireLoaded, questionnaireData]);
 
   useEffect(() => {
     if (!pair || !questionnaireLoaded || !seedReady) return;

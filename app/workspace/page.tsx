@@ -777,6 +777,26 @@ export default function WorkspacePage() {
     setWriteChoiceOpen(true);
   };
 
+  const relatedDraftCandidates = useMemo(() => {
+    if (!pendingWriteProgramId || !result) return [] as Array<{ programId: string; label: string }>;
+    const target = result.programs.find((p) => p.id === pendingWriteProgramId);
+    if (!target) return [];
+    const targetTokens = tokenizeSimilarityText(`${target.name} ${target.nameEn} ${target.department}`);
+    const candidates = draftSummaries
+      .filter((d) => d.programId !== pendingWriteProgramId && d.kinds.includes("ps"))
+      .map((d) => {
+        const p = result.programs.find((x) => x.id === d.programId);
+        if (!p) return null;
+        const score =
+          overlapCount(targetTokens, tokenizeSimilarityText(`${p.name} ${p.nameEn} ${p.department}`)) +
+          (target.degree === p.degree ? 1 : 0);
+        if (score <= 0) return null;
+        return { programId: d.programId, label: labelForDraftProgram(d.programId), score };
+      })
+      .filter(Boolean) as Array<{ programId: string; label: string; score: number }>;
+    return candidates.sort((a, b) => b.score - a.score).slice(0, 3).map(({ programId, label }) => ({ programId, label }));
+  }, [pendingWriteProgramId, result, draftSummaries]);
+
   /** 与当前主列表一致（含搜索筛选）的主页指标 */
   const dashboardStats = useMemo(() => {
     const statusCounts = {
@@ -1180,7 +1200,7 @@ export default function WorkspacePage() {
                 const schoolPrograms = programsBySchool.get(school.id) ?? [];
                 return (
                   <div key={school.id} className="space-y-0.5">
-                    <div className="group relative">
+                    <div className="group flex items-center gap-1">
                       <button
                         type="button"
                         onClick={() => {
@@ -1188,7 +1208,7 @@ export default function WorkspacePage() {
                           opts.onPick?.();
                         }}
                         className={cn(
-                          "group flex w-full items-center gap-2 rounded-md px-2 py-1 pr-8 text-left text-sm transition-colors",
+                          "group flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-left text-sm transition-colors",
                           active
                             ? "bg-interactive-active text-foreground"
                             : "text-foreground/82 hover:bg-interactive-hover hover:text-foreground"
@@ -1205,26 +1225,26 @@ export default function WorkspacePage() {
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                        className="h-6 w-6 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:text-foreground"
                         aria-label={`移除院校 ${school.name}`}
                         title="移除院校"
                         onClick={() => requestRemoveSchool(school.id)}
                       >
-                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
 
                     {active && schoolPrograms.length > 0 && (
                       <div className="ml-8 space-y-0 border-l border-border/60 pl-2">
                         {schoolPrograms.map((program) => (
-                          <div key={program.id} className="group relative">
+                          <div key={program.id} className="group flex items-center gap-1">
                             <button
                               type="button"
                               onClick={() => {
                                 openProgramDetail(program);
                                 opts.onPick?.();
                               }}
-                              className="flex w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-0.5 pr-8 text-left text-xs text-foreground/75 transition-colors hover:bg-muted/40 hover:text-foreground"
+                              className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-0.5 text-left text-xs text-foreground/75 transition-colors hover:bg-muted/40 hover:text-foreground"
                               title={program.nameEn}
                             >
                               <File className="h-3.5 w-3.5 shrink-0 text-foreground/65" />
@@ -1234,12 +1254,12 @@ export default function WorkspacePage() {
                               type="button"
                               variant="ghost"
                               size="icon"
-                              className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                              className="h-6 w-6 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:text-foreground"
                               aria-label={`移除项目 ${program.nameEn}`}
                               title="移除项目"
                               onClick={() => requestRemoveProgram(program.id)}
                             >
-                              <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                              <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </div>
                         ))}
@@ -2619,11 +2639,11 @@ export default function WorkspacePage() {
               {writeChoiceMode === "existing"
                 ? "该项目之前已生成过文书。请选择打开历史版本，或清空并创建新的草稿。"
                 : templateSourceProgramId
-                  ? "可基于已有模版文书快速创建，也可直接新建空白文书。"
-                  : "当前没有模版文书，建议直接新建。"}
+                  ? "可基于已有模版文书、相关专业文书创建，也可直接新建空白文书。"
+                  : "可基于相关专业文书创建，或直接新建空白文书。"}
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
+          <DialogFooter className="sm:justify-start">
             {writeChoiceMode === "existing" ? (
               <>
                 <Button
@@ -2650,10 +2670,11 @@ export default function WorkspacePage() {
                 </Button>
               </>
             ) : (
-              <>
+              <div className="flex w-full flex-col gap-2">
                 {templateSourceProgramId ? (
                   <Button
                     variant="outline"
+                    className="w-full justify-start text-left"
                     onClick={() => {
                       const pid = pendingWriteProgramId;
                       setWriteChoiceOpen(false);
@@ -2664,7 +2685,23 @@ export default function WorkspacePage() {
                     基于模版文书创建
                   </Button>
                 ) : null}
+                {relatedDraftCandidates.map((candidate) => (
+                  <Button
+                    key={candidate.programId}
+                    variant="outline"
+                    className="w-full justify-start text-left"
+                    onClick={() => {
+                      const pid = pendingWriteProgramId;
+                      setWriteChoiceOpen(false);
+                      if (!pid) return;
+                      router.push(`/workspace/write/${pid}?cloneFrom=${encodeURIComponent(candidate.programId)}`);
+                    }}
+                  >
+                    基于相关专业文书创建（{candidate.label}）
+                  </Button>
+                ))}
                 <Button
+                  className="w-full"
                   onClick={() => {
                     const pid = pendingWriteProgramId;
                     setWriteChoiceOpen(false);
@@ -2674,7 +2711,7 @@ export default function WorkspacePage() {
                 >
                   新建空白文书
                 </Button>
-              </>
+              </div>
             )}
           </DialogFooter>
         </DialogContent>
