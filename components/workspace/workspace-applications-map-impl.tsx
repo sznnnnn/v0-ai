@@ -19,19 +19,21 @@ export type WorkspaceMapPin = {
   logo?: string;
 };
 
-function FitBounds({ pins }: { pins: WorkspaceMapPin[] }) {
+function FitBounds({ pins, compact }: { pins: WorkspaceMapPin[]; compact?: boolean }) {
   const map = useMap();
   const sig = pins.map((p) => `${p.schoolId}:${p.lat}:${p.lng}`).join("|");
 
   useEffect(() => {
     const positions = pins.map((p) => [p.lat, p.lng] as [number, number]);
     if (positions.length === 0) return;
+    const pad = compact ? [10, 10] as [number, number] : ([40, 40] as [number, number]);
+    const maxZ = compact ? 5 : 8;
     if (positions.length === 1) {
-      map.setView(positions[0], 4);
+      map.setView(positions[0], compact ? 3 : 4);
       return;
     }
-    map.fitBounds(L.latLngBounds(positions), { padding: [40, 40], maxZoom: 8 });
-  }, [map, sig, pins.length]);
+    map.fitBounds(L.latLngBounds(positions), { padding: pad, maxZoom: maxZ });
+  }, [map, sig, pins.length, compact]);
 
   return null;
 }
@@ -40,11 +42,14 @@ export function WorkspaceApplicationsMapImpl({
   pins,
   onSelectSchool,
   className,
+  compact,
 }: {
   pins: WorkspaceMapPin[];
   onSelectSchool?: (schoolId: string) => void;
   /** 嵌入卡片等场景下可去掉外框、改圆角 */
   className?: string;
+  /** 与 KPI 卡片同级的迷你地图：无下方详情、无方形大图比例 */
+  compact?: boolean;
 }) {
   const fallbackCenter: [number, number] = [20, 10];
   const center: [number, number] =
@@ -66,24 +71,50 @@ export function WorkspaceApplicationsMapImpl({
   );
 
   return (
-    <div className={cn("w-full max-w-[340px] space-y-2", className)}>
-      <div className="aspect-square w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+    <div
+      className={cn(
+        compact ? "h-full w-full" : "w-full max-w-[340px] space-y-2",
+        className
+      )}
+    >
+      <div
+        className={cn(
+          "w-full overflow-hidden bg-card",
+          compact
+            ? "h-full rounded-none border-0 shadow-none"
+            : "aspect-square rounded-xl border border-border shadow-sm"
+        )}
+      >
         <MapContainer
           center={center}
-          zoom={pins.length === 1 ? 4 : 2}
-          className="isolate z-0 h-full w-full [&_.leaflet-control-attribution]:max-w-[min(100%,160px)] [&_.leaflet-control-attribution]:whitespace-normal [&_.leaflet-control-attribution]:text-[9px] [&_.leaflet-control-attribution]:leading-snug"
-          scrollWheelZoom
+          zoom={pins.length === 1 ? (compact ? 3 : 4) : compact ? 1 : 2}
+          zoomControl={!compact}
+          attributionControl={!compact}
+          className={cn(
+            "isolate z-0 h-full w-full",
+            !compact &&
+              "[&_.leaflet-control-attribution]:max-w-[min(100%,160px)] [&_.leaflet-control-attribution]:whitespace-normal [&_.leaflet-control-attribution]:text-[9px] [&_.leaflet-control-attribution]:leading-snug"
+          )}
+          scrollWheelZoom={!compact}
         >
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            attribution={
+              compact
+                ? ""
+                : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            }
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          <FitBounds pins={pins} />
+          <FitBounds pins={pins} compact={compact} />
           {pins.map((pin) => (
             <CircleMarker
               key={pin.schoolId}
               center={[pin.lat, pin.lng]}
-              radius={Math.min(8 + pin.programCount * 2, 18)}
+              radius={
+                compact
+                  ? Math.min(3 + pin.programCount * 1.2, 9)
+                  : Math.min(8 + pin.programCount * 2, 18)
+              }
               pathOptions={{
                 color: activeSchoolId === pin.schoolId ? "#0f766e" : "#0ea5a4",
                 fillColor: activeSchoolId === pin.schoolId ? "#14b8a6" : "#5eead4",
@@ -91,13 +122,16 @@ export function WorkspaceApplicationsMapImpl({
                 weight: activeSchoolId === pin.schoolId ? 2.5 : 2,
               }}
               eventHandlers={{
-                click: () => setActiveSchoolId(pin.schoolId),
+                click: () => {
+                  setActiveSchoolId(pin.schoolId);
+                  if (compact && onSelectSchool) onSelectSchool(pin.schoolId);
+                },
               }}
             />
           ))}
         </MapContainer>
       </div>
-      {activePin ? (
+      {!compact && activePin ? (
         <div className="rounded-lg border border-border/70 bg-background/90 px-2.5 py-2 text-left">
           <div className="flex items-start gap-2">
             <SchoolLogoMark

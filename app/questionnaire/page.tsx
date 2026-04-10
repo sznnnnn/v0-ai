@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ArrowRight, Check, Paperclip, X } from "lucide-react";
+import { Paperclip, X } from "lucide-react";
 import { GuestBanner } from "@/components/questionnaire/guest-banner";
 import { FileUpload } from "@/components/questionnaire/file-upload";
 import { PersonalInfoForm } from "@/components/questionnaire/steps/personal-info";
@@ -78,14 +78,6 @@ export default function QuestionnairePage() {
     },
     [setCurrentStep]
   );
-
-  const handleGenerateMatch = useCallback(() => {
-    if (!completionStatus.canGenerateMatch) {
-      setNavigationHint("请先完成必填步骤：个人信息、教育背景。");
-      return;
-    }
-    router.push("/match");
-  }, [completionStatus.canGenerateMatch, router]);
 
   const updateData = useCallback(
     (field: keyof QuestionnaireData, value: unknown) => {
@@ -267,23 +259,12 @@ export default function QuestionnairePage() {
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
-              size="sm"
-              className="h-9 gap-1.5 px-3"
+              size="icon"
+              className="shrink-0"
               onClick={handleUploadAutofill}
               aria-label="上传材料"
             >
-              <Paperclip className="h-3.5 w-3.5" />
-              <span className="text-xs">上传材料</span>
-            </Button>
-            <Button
-              onClick={handleGenerateMatch}
-              size="sm"
-              className="h-9 gap-1.5 px-3"
-              aria-label="去匹配"
-              disabled={!completionStatus.canGenerateMatch}
-            >
-              <ArrowRight className="h-4 w-4" />
-              <span className="text-xs">去匹配</span>
+              <Paperclip className="h-4 w-4" />
             </Button>
           </div>
         </div>

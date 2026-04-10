@@ -13,7 +13,7 @@ const WorkspaceApplicationsMapImpl = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex aspect-square w-full max-w-[200px] items-center justify-center rounded-lg border border-border/60 bg-muted/[0.12] text-xs text-muted-foreground">
+      <div className="flex h-full min-h-[3.5rem] w-full items-center justify-center rounded-md border border-border/60 bg-muted/[0.12] text-[10px] text-muted-foreground">
         地图加载中…
       </div>
     ),
@@ -24,6 +24,7 @@ export function WorkspaceApplicationsMap(props: {
   pins: WorkspaceMapPin[];
   onSelectSchool?: (schoolId: string) => void;
   className?: string;
+  compact?: boolean;
 }) {
   if (props.pins.length === 0) return null;
   return <WorkspaceApplicationsMapImpl {...props} />;

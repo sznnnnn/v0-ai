@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,9 +11,18 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+  CommandList,
+  CommandInput,
+} from "@/components/ui/command";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,17 +38,15 @@ import {
   Trash2,
   GraduationCap,
   FileText,
-  LayoutGrid,
+  House,
   ListChecks,
   Menu,
   PenLine,
   FileStack,
   BookOpen,
   MessageSquare,
-  LayoutDashboard,
   AlertTriangle,
   File,
-  MapPin,
   ExternalLink,
   ChevronDown,
   ChevronRight,
@@ -46,12 +54,33 @@ import {
   User,
   Briefcase,
   FolderGit2,
+  GripVertical,
+  CalendarClock,
 } from "lucide-react";
+import {
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  rectSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { GuestBanner } from "@/components/questionnaire/guest-banner";
 import { SchoolLogoMark } from "@/components/match/school-logo-mark";
 import { SchoolRichInfo } from "@/components/match/school-rich-info";
 import { ProgramCard } from "@/components/match/program-card";
 import { WorkspaceBuddy } from "@/components/workspace/workspace-buddy";
+import { WorkspaceApplicationsMap } from "@/components/workspace/workspace-applications-map";
+import type { WorkspaceMapPin } from "@/components/workspace/workspace-applications-map";
 import { useMatchResult, useQuestionnaire } from "@/hooks/use-questionnaire";
 import type { Program, QuestionnaireData, School } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -59,11 +88,11 @@ import {
   DOCUMENT_DRAFT_LABELS,
   DOCUMENT_DRAFT_ORDER,
   getDraft,
-  getProgramIdsWithSavedDrafts,
   listProgramDraftSummaries,
   type DocumentDraftKind,
 } from "@/lib/document-drafts";
 import { getProgramEnrichment } from "@/lib/program-enrichment";
+import { enrichSchool } from "@/lib/school-enrichment";
 
 interface ApplicationItem {
   program: Program;
@@ -138,16 +167,232 @@ function isApplicationOpen(deadline: string) {
   return d >= today;
 }
 
+/** 可排序的截止日时间戳；无法解析或 rolling 返回 null */
+function deadlineTimestampForSort(deadline: string): number | null {
+  const v = deadline.trim();
+  if (!v || /rolling/i.test(v)) return null;
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.getTime();
+}
+
+function formatDeadlineDateShort(ts: number) {
+  return new Date(ts).toLocaleDateString("zh-CN", {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  });
+}
+
+const DASHBOARD_UPCOMING_DEADLINE_COUNT = 5;
+
+const TIER_ORDER: School["category"][] = ["reach", "match", "safety"];
+
+const TIER_SECTION_LABEL: Record<School["category"], string> = {
+  reach: "冲刺",
+  match: "主申",
+  safety: "保底",
+};
+
+/** 在保持其余项目相对顺序的前提下，仅重排当前列表中这批 id 在总顺序里的位置 */
+function reorderDisplayedProgramsInFullOrder(
+  fullOrder: string[],
+  idsInDisplayOrder: string[],
+  newOrder: string[]
+): string[] {
+  const idSet = new Set(idsInDisplayOrder);
+  if (idSet.size !== idsInDisplayOrder.length) return fullOrder;
+  if (newOrder.length !== idsInDisplayOrder.length) return fullOrder;
+  const positions: number[] = [];
+  fullOrder.forEach((id, i) => {
+    if (idSet.has(id)) positions.push(i);
+  });
+  if (positions.length !== newOrder.length) return fullOrder;
+  const next = [...fullOrder];
+  newOrder.forEach((id, j) => {
+    next[positions[j]] = id;
+  });
+  return next;
+}
+
+/** 卡片主标题：优先中文项目名，否则英文全称 */
+function primaryProgramLabel(program: Program) {
+  const zh = program.name?.trim();
+  if (zh) return zh;
+  return program.nameEn;
+}
+
+function WorkspaceApplicationCardTooltipBody({
+  program,
+  school,
+}: {
+  program: Program;
+  school: School;
+}) {
+  const zh = program.name?.trim();
+  const showEnName = zh && program.nameEn.trim() && zh !== program.nameEn.trim();
+
+  const detailRows: { label: string; value: string }[] = [];
+  if (program.department?.trim()) {
+    detailRows.push({ label: "院系", value: program.department.trim() });
+  }
+  if (program.duration?.trim()) {
+    detailRows.push({ label: "学制", value: program.duration.trim() });
+  }
+  if (program.deadline?.trim()) {
+    detailRows.push({ label: "截止", value: program.deadline.trim() });
+  }
+  if (program.applicationFee?.trim()) {
+    detailRows.push({ label: "申请费", value: program.applicationFee.trim() });
+  }
+  if (program.tuition?.trim()) {
+    detailRows.push({ label: "学费参考", value: program.tuition.trim() });
+  }
+
+  const blurb =
+    program.curriculumNote?.trim() ||
+    program.description?.trim() ||
+    "";
+
+  return (
+    <div className="space-y-2 text-left">
+      <div>
+        <p className="font-semibold leading-snug text-background">
+          {primaryProgramLabel(program)}
+        </p>
+        {showEnName ? (
+          <p className="mt-0.5 text-[11px] leading-snug text-background/85">{program.nameEn}</p>
+        ) : null}
+        <p className="mt-1 text-[11px] leading-snug text-background/80">
+          {school.name}
+          {school.nameEn?.trim() ? `（${school.nameEn.trim()}）` : ""}
+          {program.degree ? ` · ${program.degree}` : ""}
+        </p>
+      </div>
+      {detailRows.length > 0 ? (
+        <dl className="grid gap-1 text-[11px] leading-snug text-background/90">
+          {detailRows.map(({ label, value }) => (
+            <div key={label} className="grid grid-cols-[3.5rem_1fr] gap-x-1.5">
+              <dt className="text-background/65">{label}</dt>
+              <dd className="min-w-0">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+      {blurb ? (
+        <p className="border-t border-background/20 pt-2 text-[11px] leading-relaxed text-background/85">
+          {blurb.length > 280 ? `${blurb.slice(0, 277)}…` : blurb}
+        </p>
+      ) : null}
+      {program.matchReasons?.length ? (
+        <ul className="border-t border-background/20 pt-2 text-[11px] leading-relaxed text-background/85">
+          {program.matchReasons.slice(0, 4).map((reason, i) => (
+            <li key={i} className="list-inside list-disc">
+              {reason}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function SortableWorkspaceApplicationCard({
+  program,
+  school,
+  onOpen,
+  statusMenu,
+  deadlineLabel,
+}: {
+  program: Program;
+  school: School;
+  onOpen: () => void;
+  statusMenu: ReactNode;
+  deadlineLabel?: string | null;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: program.id,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "group min-w-0 rounded-lg border border-border/35 bg-card shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[opacity,box-shadow,border-color] duration-150 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]",
+        "hover:border-border/50 focus-within:border-border/50",
+        isDragging && "z-20 border-border/60 opacity-80 shadow-md ring-2 ring-ring/25"
+      )}
+    >
+      <div className="flex gap-1.5 p-2 sm:p-2.5">
+        <button
+          type="button"
+          className={cn(
+            "touch-none flex shrink-0 items-start justify-center rounded-md pt-px text-muted-foreground transition-opacity duration-150 hover:bg-muted hover:text-foreground",
+            "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+            isDragging && "opacity-100"
+          )}
+          aria-label="拖拽排序"
+          {...listeners}
+          {...attributes}
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+        <Tooltip delayDuration={350}>
+          <TooltipTrigger asChild>
+            <div className="min-w-0 flex-1 space-y-0.5 outline-none">
+              <div className="flex items-start gap-1">
+                <button
+                  type="button"
+                  onClick={onOpen}
+                  className="min-w-0 flex-1 rounded-md px-0.5 py-0 text-left transition-colors hover:bg-muted/50"
+                >
+                  <p className="line-clamp-2 text-sm font-medium leading-tight text-foreground">
+                    {primaryProgramLabel(program)}
+                  </p>
+                  <p className="mt-px truncate text-[11px] leading-tight text-muted-foreground">
+                    {school.name} · {program.degree}
+                  </p>
+                </button>
+                <div
+                  className="shrink-0 pt-px"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {statusMenu}
+                </div>
+              </div>
+              {deadlineLabel ? (
+                <div className="flex flex-wrap gap-x-2 gap-y-0.5 pl-0.5 text-[10px] leading-tight text-muted-foreground">
+                  <span className="font-medium text-amber-800 dark:text-amber-200">{deadlineLabel}</span>
+                </div>
+              ) : null}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent
+            side="top"
+            sideOffset={6}
+            className="max-h-[min(50vh,360px)] max-w-[min(320px,calc(100vw-2rem))] overflow-y-auto px-3 py-2.5 text-left"
+          >
+            <WorkspaceApplicationCardTooltipBody program={program} school={school} />
+          </TooltipContent>
+        </Tooltip>
+      </div>
+    </div>
+  );
+}
+
 export default function WorkspacePage() {
+  const router = useRouter();
   const { result } = useMatchResult();
-  const {
-    data: questionnaireData,
-    isLoaded: questionnaireLoaded,
-    saveData,
-    getCompletionStatus,
-  } = useQuestionnaire();
+  const { data: questionnaireData, saveData } = useQuestionnaire();
   const [addedProgramIds, setAddedProgramIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [workspaceCommandOpen, setWorkspaceCommandOpen] = useState(false);
   const [applications, setApplications] = useState<Record<string, ApplicationItem["status"]>>({});
   const [selectedSchoolId, setSelectedSchoolId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<"dashboard" | "background">("dashboard");
@@ -188,6 +433,37 @@ export default function WorkspacePage() {
   }, [selectedSchoolId]);
 
   useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "k" || (!e.metaKey && !e.ctrlKey) || e.shiftKey) return;
+      if (workspaceCommandOpen) {
+        e.preventDefault();
+        setWorkspaceCommandOpen(false);
+        return;
+      }
+      const t = e.target as HTMLElement | null;
+      if (t?.closest("[data-skip-workspace-cmdk]")) return;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      e.preventDefault();
+      setWorkspaceCommandOpen(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [workspaceCommandOpen]);
+
+  useEffect(() => {
+    if (!workspaceCommandOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "l" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        void navigator.clipboard.writeText(window.location.href);
+        setLiveMessage("已复制当前页链接");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [workspaceCommandOpen]);
+
+  useEffect(() => {
     const bump = () => setDraftRefresh((n) => n + 1);
     window.addEventListener("focus", bump);
     document.addEventListener("visibilitychange", bump);
@@ -214,12 +490,6 @@ export default function WorkspacePage() {
       projects: questionnaireData.projects,
     });
   }, [isBackgroundEditing, questionnaireData]);
-
-  const programIdsWithDrafts = useMemo(() => {
-    if (!draftStorageReady) return new Set<string>();
-    void draftRefresh;
-    return getProgramIdsWithSavedDrafts();
-  }, [draftStorageReady, draftRefresh, addedProgramIds.join(",")]);
 
   const draftSummaries = useMemo(() => {
     if (!draftStorageReady) return [];
@@ -302,16 +572,28 @@ export default function WorkspacePage() {
     return searchFiltered.filter(({ school }) => school.id === selectedSchoolId);
   }, [searchFiltered, selectedSchoolId]);
 
-  const groupedBySchool = useMemo(() => {
-    const groups: Record<string, { school: School; programs: Program[] }> = {};
-    displayPrograms.forEach(({ program, school }) => {
-      if (!groups[school.id]) {
-        groups[school.id] = { school, programs: [] };
-      }
-      groups[school.id].programs.push(program);
+  const programsByTier = useMemo(() => {
+    const buckets: Record<School["category"], { program: Program; school: School }[]> = {
+      reach: [],
+      match: [],
+      safety: [],
+    };
+    displayPrograms.forEach((pair) => {
+      buckets[pair.school.category].push(pair);
     });
-    return Object.values(groups);
-  }, [displayPrograms]);
+    TIER_ORDER.forEach((tier) => {
+      buckets[tier].sort(
+        (a, b) =>
+          addedProgramIds.indexOf(a.program.id) - addedProgramIds.indexOf(b.program.id)
+      );
+    });
+    return buckets;
+  }, [displayPrograms, addedProgramIds]);
+
+  const applicationListSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   const schoolsInWorkspace = useMemo(() => {
     const map = new Map<string, School>();
@@ -386,7 +668,7 @@ export default function WorkspacePage() {
     return getProgramEnrichment(selectedProgramPair.program, selectedProgramPair.school);
   }, [selectedProgramPair]);
 
-  /** 与当前主列表一致（含搜索筛选）的仪表盘数字 */
+  /** 与当前主列表一致（含搜索筛选）的主页指标 */
   const dashboardStats = useMemo(() => {
     const statusCounts = {
       todo: 0,
@@ -410,14 +692,48 @@ export default function WorkspacePage() {
     };
   }, [displayPrograms, applications]);
 
+  const dashboardMapPins = useMemo((): WorkspaceMapPin[] => {
+    const bySchool = new Map<string, { school: School; count: number }>();
+    for (const { program, school } of displayPrograms) {
+      const geoSchool = enrichSchool(school);
+      if (geoSchool.lat == null || geoSchool.lng == null) continue;
+      const cur = bySchool.get(school.id);
+      if (cur) cur.count += 1;
+      else bySchool.set(school.id, { school: geoSchool, count: 1 });
+    }
+    return Array.from(bySchool.values()).map(({ school, count }) => {
+      const lat = school.lat!;
+      const lng = school.lng!;
+      return {
+        schoolId: school.id,
+        name: school.name,
+        nameEn: school.nameEn,
+        city: school.city,
+        country: school.country,
+        lat,
+        lng,
+        programCount: count,
+        logo: school.logo,
+      };
+    });
+  }, [displayPrograms]);
+
+  const upcomingDeadlinePrograms = useMemo(() => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const items: { program: Program; school: School; ts: number; raw: string }[] = [];
+    for (const { program, school } of displayPrograms) {
+      const raw = program.deadline?.trim() ?? "";
+      const ts = deadlineTimestampForSort(raw);
+      if (ts === null) continue;
+      if (ts < todayStart) continue;
+      items.push({ program, school, ts, raw });
+    }
+    items.sort((a, b) => a.ts - b.ts);
+    return items.slice(0, DASHBOARD_UPCOMING_DEADLINE_COUNT);
+  }, [displayPrograms]);
+
   const backgroundMaterialCount = questionnaireData.files.length;
-  const questionnaireCompletion = useMemo(
-    () => getCompletionStatus(),
-    [getCompletionStatus]
-  );
-  const questionnaireProgress = Math.round(
-    (questionnaireCompletion.completedSteps.length / 8) * 100
-  );
 
   const updateStatus = (programId: string, status: ApplicationItem["status"]) => {
     const updated = { ...applications, [programId]: status };
@@ -463,7 +779,7 @@ export default function WorkspacePage() {
           variant="outline"
           size="sm"
           className={cn(
-            "h-8 gap-1.5 px-2",
+            "h-8 gap-1.5 px-2 shadow-none",
             compact && "h-7 px-1.5"
           )}
           aria-label="修改申请状态"
@@ -505,15 +821,15 @@ export default function WorkspacePage() {
     node.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  const openQuestionnaire = () => {
-    if (typeof window === "undefined") return;
-    window.location.href = "/questionnaire";
-  };
-
   const openBackgroundSummary = () => {
     setSelectedSchoolId(null);
     setSelectedProgramId(null);
     setActiveView("background");
+  };
+
+  const finishWorkspaceCommand = () => {
+    setWorkspaceCommandOpen(false);
+    setMobileSidebarOpen(false);
   };
 
   const updateBackgroundPersonalInfo = (
@@ -583,8 +899,28 @@ export default function WorkspacePage() {
   const sidebarBody = (opts: { onPick?: () => void }) => (
     <>
       <div className="px-3 pb-4">
-        <p className="ui-section-heading mb-2 px-2">浏览</p>
         <nav className="space-y-0.5" aria-label="浏览">
+          <button
+            type="button"
+            onClick={() => setWorkspaceCommandOpen(true)}
+            className={cn(
+              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+              "text-foreground/82 hover:bg-interactive-hover hover:text-foreground",
+              "focus-visible:bg-interactive-hover focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
+            )}
+            aria-label="打开工作台搜索"
+            aria-keyshortcuts="Meta+K Control+K"
+          >
+            <Search className="h-4 w-4 shrink-0 text-foreground/70" aria-hidden />
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate",
+                searchQuery.trim() ? "text-foreground" : "text-muted-foreground"
+              )}
+            >
+              {searchQuery.trim() ? searchQuery : "搜索项目、学校与文书…"}
+            </span>
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -594,16 +930,21 @@ export default function WorkspacePage() {
               opts.onPick?.();
             }}
             className={cn(
-              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+              "group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
               selectedSchoolId == null && activeView === "dashboard"
                 ? "bg-interactive-active text-foreground"
                 : "text-foreground/82 hover:bg-interactive-hover hover:text-foreground"
             )}
+            aria-label={
+              addedPrograms.length > 0 ? `主页，已添加 ${addedPrograms.length} 个项目` : "主页"
+            }
           >
-            <LayoutGrid className="h-4 w-4 shrink-0 text-foreground/70" />
-            <span className="flex-1 truncate">仪表盘</span>
+            <House className="h-4 w-4 shrink-0 text-foreground/70" />
+            <span className="flex-1 truncate">主页</span>
             {addedPrograms.length > 0 && (
-              <span className="text-xs text-foreground/72 tabular-nums">{addedPrograms.length}</span>
+              <span className="text-xs text-foreground/72 tabular-nums opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100">
+                {addedPrograms.length}
+              </span>
             )}
           </button>
           <button
@@ -626,20 +967,20 @@ export default function WorkspacePage() {
       </div>
 
       <div className="px-3 pb-4">
-        <p className="ui-section-heading mb-2 px-2">学校</p>
+        <p className="ui-section-heading mb-1.5 px-2">学校</p>
         {schoolsInWorkspace.length === 0 ? (
           <p className="px-2 text-xs leading-relaxed text-foreground/68">
             请先在选校结果页勾选项目，列表会自动同步
           </p>
         ) : (
           <ScrollArea className="h-[min(40vh,280px)] pr-2">
-            <div className="space-y-0.5">
+            <div className="space-y-0">
               {schoolsInWorkspace.map((school) => {
                 const active = selectedSchoolId === school.id;
                 const count = addedPrograms.filter((p) => p.school.id === school.id).length;
                 const schoolPrograms = programsBySchool.get(school.id) ?? [];
                 return (
-                  <div key={school.id} className="space-y-1">
+                  <div key={school.id} className="space-y-0.5">
                     <button
                       type="button"
                       onClick={() => {
@@ -647,19 +988,22 @@ export default function WorkspacePage() {
                         opts.onPick?.();
                       }}
                       className={cn(
-                        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                        "group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm transition-colors",
                         active
                           ? "bg-interactive-active text-foreground"
                           : "text-foreground/82 hover:bg-interactive-hover hover:text-foreground"
                       )}
+                      aria-label={`${school.name}，${count} 个项目`}
                     >
                       <SchoolLogoMark school={school} size="sidebar" rounded="md" />
                       <span className="min-w-0 flex-1 truncate">{school.name}</span>
-                      <span className="text-xs text-foreground/72 tabular-nums">{count}</span>
+                      <span className="text-xs text-foreground/72 tabular-nums opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100">
+                        {count}
+                      </span>
                     </button>
 
                     {active && schoolPrograms.length > 0 && (
-                      <div className="ml-8 space-y-0.5 border-l border-border/60 pl-2">
+                      <div className="ml-8 space-y-0 border-l border-border/60 pl-2">
                         {schoolPrograms.map((program) => (
                           <button
                             key={program.id}
@@ -668,7 +1012,7 @@ export default function WorkspacePage() {
                               openProgramDetail(program);
                               opts.onPick?.();
                             }}
-                            className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs text-foreground/75 transition-colors hover:bg-muted/40 hover:text-foreground"
+                            className="flex w-full items-center gap-1.5 rounded-md px-2 py-0.5 text-left text-xs text-foreground/75 transition-colors hover:bg-muted/40 hover:text-foreground"
                             title={program.nameEn}
                           >
                             <File className="h-3.5 w-3.5 shrink-0 text-foreground/65" />
@@ -686,7 +1030,7 @@ export default function WorkspacePage() {
       </div>
 
       <div className="px-3 pb-4">
-        <p className="ui-section-heading mb-2 px-2">我的文书</p>
+        <p className="ui-section-heading mb-2 px-2">文书</p>
         {draftSummaries.length === 0 ? (
           <p className="px-2 text-xs leading-relaxed text-foreground/68">
             在项目中点击笔形图标创建文书后，草稿会出现在这里。
@@ -724,7 +1068,12 @@ export default function WorkspacePage() {
   );
 
   const sidebarFooter = (opts: { onPick?: () => void }) => (
-    <div className="border-t border-border/60 bg-sidebar px-3 py-3">
+    <div
+      className={cn(
+        "shrink-0 border-t border-border/60 bg-sidebar px-3 py-3",
+        "md:fixed md:bottom-0 md:left-0 md:z-30 md:w-[260px] md:border-r md:border-border/80"
+      )}
+    >
       <div className="flex flex-col gap-1">
         <button
           type="button"
@@ -745,6 +1094,14 @@ export default function WorkspacePage() {
           <MessageSquare className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
           <span>用户反馈</span>
         </a>
+        <Link
+          href="/"
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors duration-150 ease-in-out hover:bg-interactive-hover hover:text-foreground"
+          onClick={() => opts.onPick?.()}
+        >
+          <Sparkles className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+          <span>测试</span>
+        </Link>
       </div>
     </div>
   );
@@ -759,34 +1116,10 @@ export default function WorkspacePage() {
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Desktop sidebar — Notion-like */}
         <aside className="hidden min-h-0 w-[260px] shrink-0 flex-col border-r border-border/80 bg-sidebar md:flex">
-          <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border/60 px-4">
-            <Link href="/" className="flex min-w-0 items-center gap-2">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary">
-                <Sparkles className="h-4 w-4 text-primary-foreground" />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-foreground">EduMatch</p>
-                <p className="truncate text-xs text-muted-foreground">申请工作台</p>
-              </div>
-            </Link>
-          </div>
-
-          <div className="shrink-0 border-b border-border/60 p-3">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="搜索…"
-                className="h-9 border-border/80 bg-background/80 pl-8 text-sm shadow-none"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-          </div>
-
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]">
-            <div className="py-3">{sidebarBody({})}</div>
-            {sidebarFooter({})}
+            <div className="py-3 md:pb-32">{sidebarBody({})}</div>
           </div>
+          {sidebarFooter({})}
         </aside>
 
         {/* Main */}
@@ -808,7 +1141,7 @@ export default function WorkspacePage() {
                   ? `${selectedSchool.name} · ${displayPrograms.length} 项`
                   : activeView === "background"
                     ? "我的背景"
-                    : "仪表盘"}
+                    : "主页"}
               </p>
             </div>
             <Link href="/" className="shrink-0">
@@ -818,14 +1151,8 @@ export default function WorkspacePage() {
             </Link>
           </header>
 
-          <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 md:py-8">
+          <main className="flex-1 overflow-y-auto px-5 py-10 sm:px-7 md:px-10 md:py-12">
             <div className={cn("mx-auto", selectedSchool || selectedProgramPair ? "max-w-4xl" : "max-w-6xl")}>
-              {!selectedSchool && !selectedProgramPair && activeView === "dashboard" ? (
-                <div className="mb-6 flex justify-end">
-                  <WorkspaceBuddy className="pt-2 sm:pt-3" />
-                </div>
-              ) : null}
-
               {selectedProgramPair && (
                 <section className="space-y-4">
                   <nav className="mb-1" aria-label="项目层级导航">
@@ -849,64 +1176,71 @@ export default function WorkspacePage() {
                   </nav>
 
                   <div className="space-y-4">
-                    <div className="ui-card px-4 py-4 sm:px-5">
-                      <div className="flex items-start gap-3">
-                        <SchoolLogoMark school={selectedProgramPair.school} size="row" rounded="md" />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-base font-semibold text-foreground sm:text-lg">
-                            {selectedProgramPair.program.nameEn}
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {selectedProgramPair.school.nameEn} · {selectedProgramPair.program.degree} ·{" "}
-                            {selectedProgramPair.program.duration}
-                          </p>
+                    <div className="ui-card px-4 py-5 sm:px-6">
+                      <div className="flex flex-col gap-4">
+                        <div className="flex items-start gap-3">
+                          <SchoolLogoMark school={selectedProgramPair.school} size="row" rounded="md" />
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <h2 className="truncate text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+                              {selectedProgramPair.program.nameEn}
+                            </h2>
+                            <p className="text-xs leading-relaxed text-muted-foreground">
+                              {selectedProgramPair.school.nameEn} · {selectedProgramPair.program.degree} ·{" "}
+                              {selectedProgramPair.program.duration}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          {renderStatusMenu(
-                            selectedProgramPair.program.id,
-                            (applications[selectedProgramPair.program.id] || "todo") as keyof typeof statusConfig
-                          )}
-                          {selectedProgramExtra?.links?.[0]?.url ? (
-                            <Button
-                              size="sm"
-                              asChild
-                            >
-                              <a
-                                href={selectedProgramExtra.links[0].url}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                <ExternalLink className="h-3.5 w-3.5" />
-                                项目链接
-                              </a>
+                        <div className="flex flex-col gap-3 border-t border-border/70 pt-4 sm:flex-row sm:items-center sm:justify-end">
+                          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                            {renderStatusMenu(
+                              selectedProgramPair.program.id,
+                              (applications[selectedProgramPair.program.id] || "todo") as keyof typeof statusConfig
+                            )}
+                            {selectedProgramExtra?.links?.[0]?.url ? (
+                              <Button variant="outline" size="sm" className="shrink-0" asChild>
+                                <a
+                                  href={selectedProgramExtra.links[0].url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                  项目链接
+                                </a>
+                              </Button>
+                            ) : null}
+                            <Button size="sm" className="shrink-0 shadow-sm" asChild>
+                              <Link href={`/workspace/write/${selectedProgramPair.program.id}`}>
+                                <PenLine className="h-3.5 w-3.5" />
+                                写文书
+                              </Link>
                             </Button>
-                          ) : null}
-                          <Button size="sm" className="shrink-0" asChild>
-                            <Link href={`/workspace/write/${selectedProgramPair.program.id}`}>
-                              <PenLine className="h-3.5 w-3.5" />
-                              写文书
-                            </Link>
-                          </Button>
+                          </div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="grid gap-2 rounded-xl border border-border/80 bg-surface-muted px-4 py-3 text-xs sm:grid-cols-2 lg:grid-cols-4 sm:px-5">
-                      <div className="rounded-md border border-border/70 bg-background px-3 py-2" aria-label="学制信息">
-                        <p className="text-muted-foreground">学制</p>
-                        <p className="mt-1 text-sm font-semibold text-foreground">{selectedProgramPair.program.duration}</p>
+                    <div className="grid gap-3 rounded-xl border border-border/80 bg-surface-muted px-4 py-4 text-xs sm:grid-cols-2 lg:grid-cols-4 sm:px-5">
+                      <div className="rounded-md border border-border/70 bg-background px-3 py-2.5" aria-label="学制信息">
+                        <p className="text-[11px] font-medium text-muted-foreground">学制</p>
+                        <p className="mt-1.5 text-sm font-semibold tabular-nums text-foreground">
+                          {selectedProgramPair.program.duration}
+                        </p>
                       </div>
-                      <div className="rounded-md border border-border/70 bg-background px-3 py-2" aria-label="申请截止日期">
-                        <p className="text-muted-foreground">申请截止</p>
-                        <p className="mt-1 text-sm font-semibold text-foreground">{selectedProgramPair.program.deadline}</p>
+                      <div className="rounded-md border border-border/70 bg-background px-3 py-2.5" aria-label="申请截止日期">
+                        <p className="text-[11px] font-medium text-muted-foreground">申请截止</p>
+                        <p className="mt-1.5 text-sm font-semibold tabular-nums text-foreground">
+                          {selectedProgramPair.program.deadline}
+                        </p>
                       </div>
-                      <div className="rounded-md border border-border/70 bg-background px-3 py-2" aria-label="项目学费">
-                        <p className="text-muted-foreground">学费</p>
-                        <p className="mt-1 text-sm font-semibold text-foreground">{selectedProgramPair.program.tuition}</p>
+                      <div className="rounded-md border border-border/70 bg-background px-3 py-2.5" aria-label="项目学费">
+                        <p className="text-[11px] font-medium text-muted-foreground">学费</p>
+                        <p className="mt-1.5 text-sm font-semibold tabular-nums text-foreground">
+                          {selectedProgramPair.program.tuition}
+                        </p>
                       </div>
-                      <div className="rounded-md border border-border/70 bg-background px-3 py-2" aria-label="所在城市与国家">
-                        <p className="text-muted-foreground">地点</p>
-                        <p className="mt-1 text-sm font-semibold text-foreground">
+                      <div className="rounded-md border border-border/70 bg-background px-3 py-2.5" aria-label="所在城市与国家">
+                        <p className="text-[11px] font-medium text-muted-foreground">地点</p>
+                        <p className="mt-1.5 text-sm font-semibold text-foreground">
                           {selectedProgramPair.school.city} · {selectedProgramPair.school.country}
                         </p>
                       </div>
@@ -915,8 +1249,8 @@ export default function WorkspacePage() {
                     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
                       <div className="space-y-3">
                         <section id="section-facts" className="rounded-md border border-border/70 bg-surface-muted">
-                          <div className="border-b border-border/70 px-3 py-2">
-                            <p className="text-xs font-medium text-muted-foreground">项目信息</p>
+                          <div className="border-b border-border/70 bg-muted/20 px-3 py-2.5">
+                            <h3 className="text-sm font-semibold text-foreground">项目信息</h3>
                           </div>
                           <div className="divide-y divide-border/70 text-sm">
                             <div className="flex items-center justify-between px-3 py-2.5">
@@ -942,13 +1276,13 @@ export default function WorkspacePage() {
                             aria-controls="section-overview-content"
                             onClick={() => toggleDetailSection("overview")}
                           >
-                            <p className="text-xs font-medium text-muted-foreground">项目简介</p>
+                            <span className="text-sm font-semibold text-foreground">项目简介</span>
                             <ChevronRight className={cn("h-4 w-4 text-muted-foreground transition-transform", expandedSections.overview && "rotate-90")} />
                           </button>
                           <p
                             id="section-overview-content"
                             className={cn(
-                              "pt-2 text-sm leading-relaxed text-foreground/90",
+                              "pt-2 text-sm leading-relaxed text-muted-foreground",
                               expandedSections.overview ? "" : "line-clamp-3"
                             )}
                           >
@@ -966,13 +1300,13 @@ export default function WorkspacePage() {
                                 aria-controls="section-orientation-content"
                                 onClick={() => toggleDetailSection("orientation")}
                               >
-                                <p className="text-xs font-medium text-muted-foreground">培养定位</p>
+                                <span className="text-sm font-semibold text-foreground">培养定位</span>
                                 <ChevronRight className={cn("h-4 w-4 text-muted-foreground transition-transform", expandedSections.orientation && "rotate-90")} />
                               </button>
                               <p
                                 id="section-orientation-content"
                                 className={cn(
-                                  "pt-2 text-sm leading-relaxed text-foreground/90",
+                                  "pt-2 text-sm leading-relaxed text-muted-foreground",
                                   expandedSections.orientation ? "" : "line-clamp-2"
                                 )}
                               >
@@ -988,7 +1322,7 @@ export default function WorkspacePage() {
                                 aria-controls="section-highlights-content"
                                 onClick={() => toggleDetailSection("highlights")}
                               >
-                                <p className="text-xs font-medium text-muted-foreground">项目亮点</p>
+                                <span className="text-sm font-semibold text-foreground">项目亮点</span>
                                 <ChevronRight className={cn("h-4 w-4 text-muted-foreground transition-transform", expandedSections.highlights && "rotate-90")} />
                               </button>
                               <ul
@@ -999,7 +1333,7 @@ export default function WorkspacePage() {
                                 )}
                               >
                                 {selectedProgramExtra.highlights.map((item, idx) => (
-                                  <li key={idx} className="text-sm text-foreground/90">
+                                  <li key={idx} className="text-sm leading-relaxed text-muted-foreground">
                                     - {item}
                                   </li>
                                 ))}
@@ -1014,7 +1348,7 @@ export default function WorkspacePage() {
                                 aria-controls="section-curriculum-content"
                                 onClick={() => toggleDetailSection("curriculum")}
                               >
-                                <p className="text-xs font-medium text-muted-foreground">课程方向</p>
+                                <span className="text-sm font-semibold text-foreground">课程方向</span>
                                 <ChevronRight className={cn("h-4 w-4 text-muted-foreground transition-transform", expandedSections.curriculum && "rotate-90")} />
                               </button>
                               <div
@@ -1043,7 +1377,7 @@ export default function WorkspacePage() {
 
                       <aside className="space-y-3">
                             <div className="space-y-2 rounded-md border border-border/70 p-3">
-                          <p className="text-xs font-medium text-muted-foreground">申请要求</p>
+                          <h3 className="text-sm font-semibold text-foreground">申请要求</h3>
                               {selectedProgramPair.program.requirements.map((req, idx) => (
                                 <div
                                   key={idx}
@@ -1060,10 +1394,10 @@ export default function WorkspacePage() {
                         {selectedProgramExtra && (
                           <>
                             <div className="space-y-2 rounded-md border border-border/70 p-3">
-                              <p className="text-xs font-medium text-muted-foreground">申请材料清单</p>
+                              <h3 className="text-sm font-semibold text-foreground">申请材料清单</h3>
                               <ul className="space-y-1.5">
                                 {selectedProgramExtra.applicationChecklist.map((item, idx) => (
-                                  <li key={idx} className="text-xs text-foreground/85">
+                                  <li key={idx} className="text-xs leading-relaxed text-muted-foreground">
                                     - {item}
                                   </li>
                                 ))}
@@ -1071,10 +1405,10 @@ export default function WorkspacePage() {
                             </div>
 
                             <div className="space-y-2 rounded-md border border-border/70 p-3">
-                              <p className="text-xs font-medium text-muted-foreground">时间线</p>
+                              <h3 className="text-sm font-semibold text-foreground">时间线</h3>
                               <ul className="space-y-1.5">
                                 {selectedProgramExtra.timeline.map((item, idx) => (
-                                  <li key={idx} className="text-xs text-foreground/85">
+                                  <li key={idx} className="text-xs leading-relaxed text-muted-foreground">
                                     {idx + 1}. {item}
                                   </li>
                                 ))}
@@ -1085,7 +1419,7 @@ export default function WorkspacePage() {
 
                         {selectedProgramExtra && selectedProgramExtra.links.length > 0 && (
                           <div className="space-y-2 rounded-md border border-border/70 p-3">
-                            <p className="text-xs font-medium text-muted-foreground">外部信息</p>
+                            <h3 className="text-sm font-semibold text-foreground">外部信息</h3>
                             <div className="space-y-1.5">
                               {selectedProgramExtra.links.map((item) => (
                                 <a
@@ -1093,7 +1427,7 @@ export default function WorkspacePage() {
                                   href={item.url}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="block text-xs text-foreground/85 underline decoration-border underline-offset-2 hover:decoration-foreground"
+                                  className="block text-xs text-muted-foreground underline decoration-border/80 underline-offset-2 hover:text-foreground hover:decoration-foreground"
                                 >
                                   <span>{item.label}</span>
                                 </a>
@@ -1108,79 +1442,164 @@ export default function WorkspacePage() {
               )}
 
               {!selectedSchool && !selectedProgramPair && activeView === "dashboard" && (
-                <section className="mb-8 space-y-5" aria-label="申请概览仪表盘">
-                  {questionnaireLoaded ? (
-                    <Card className="gap-0 border-border/80 py-0 shadow-none">
-                      <CardContent className="px-4 py-2.5">
-                        <div className="mb-2 flex items-center justify-between text-sm text-muted-foreground">
-                          <span>背景资料完成度</span>
-                          <span className="tabular-nums">{questionnaireProgress}%</span>
-                        </div>
-                        <div className="h-1.5 rounded-full bg-muted">
-                          <div
-                            className="h-full rounded-full bg-foreground/80 transition-all duration-300"
-                            style={{ width: `${questionnaireProgress}%` }}
-                          />
-                        </div>
-                        {questionnaireCompletion.canGenerateMatch ? (
-                          <p className="mt-1.5 text-xs text-muted-foreground">必填信息已完整，可继续补充背景。</p>
-                        ) : (
-                          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-xs text-amber-700 dark:text-amber-300">
-                              还不能正式匹配：请先完成个人信息与教育背景。
-                            </p>
-                            <Button size="sm" variant="outline" className="h-8" onClick={openQuestionnaire}>
-                              继续完善
-                            </Button>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ) : null}
-
+                <section
+                  className="mb-6 space-y-6 md:mb-8 md:space-y-8"
+                  aria-label="申请概览 · 主页"
+                >
+                  <div className="flex justify-start">
+                    <WorkspaceBuddy />
+                  </div>
                   {addedPrograms.length > 0 ? (
-                    <section className="space-y-3" aria-label="概览指标">
-                      <div className="flex items-center gap-2">
-                        <LayoutGrid className="h-4 w-4 text-muted-foreground" aria-hidden />
-                        <h2 className="text-sm font-medium text-foreground">概览指标</h2>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-                        <button
-                          type="button"
-                          onClick={() => jumpToApplicationList()}
-                          className="rounded-lg border border-border/70 bg-surface-muted px-4 py-3.5 text-left transition-colors hover:bg-surface-muted-hover"
-                        >
-                          <span className="ui-field-label font-medium tracking-wide">项目</span>
-                          <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
-                            {dashboardStats.programs}
-                          </p>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            jumpToApplicationList();
-                          }}
-                          className="rounded-lg border border-border/70 bg-surface-muted px-4 py-3.5 text-left transition-colors hover:bg-surface-muted-hover"
-                        >
-                          <span className="ui-field-label font-medium tracking-wide">院校</span>
-                          <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
-                            {dashboardStats.schools}
-                          </p>
-                        </button>
-                        <div className="rounded-lg border border-border/70 bg-surface-muted px-4 py-3.5">
-                          <span className="ui-field-label font-medium tracking-wide">待申请</span>
-                          <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
-                            {dashboardStats.todo}
-                          </p>
+                    <div
+                      className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start sm:justify-start sm:gap-5 md:gap-6"
+                      role="region"
+                      aria-label="申请数据概览"
+                    >
+                        <div className="flex w-full min-w-0 flex-col sm:max-w-[15.5rem] sm:shrink-0">
+                          {dashboardMapPins.length > 0 ? (
+                            <div
+                              className="flex w-full flex-col overflow-hidden rounded-lg border border-border/60 bg-background/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:bg-background/60 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
+                              role="img"
+                              aria-label={`院校分布，共 ${dashboardStats.schools} 所`}
+                            >
+                              <div className="flex shrink-0 flex-col gap-1 border-b border-border/50 px-4 py-3">
+                                <div className="flex items-baseline justify-between gap-3">
+                                  <span className="ui-field-label font-medium tracking-wide text-foreground">
+                                    院校
+                                  </span>
+                                  <p className="text-xl font-semibold tabular-nums tracking-tight text-foreground">
+                                    {dashboardStats.schools}
+                                  </p>
+                                </div>
+                                <p className="truncate text-[9px] leading-tight text-muted-foreground">
+                                  地图 ©{" "}
+                                  <a
+                                    href="https://www.openstreetmap.org/copyright"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="underline decoration-border/80 underline-offset-2 hover:text-foreground"
+                                  >
+                                    OpenStreetMap
+                                  </a>
+                                </p>
+                              </div>
+                              <div className="relative min-h-[7.5rem] w-full overflow-hidden sm:min-h-[8rem]">
+                                <WorkspaceApplicationsMap
+                                  compact
+                                  pins={dashboardMapPins}
+                                  onSelectSchool={(id) => selectSchool(id)}
+                                  className="absolute inset-0 h-full w-full max-w-none"
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => jumpToApplicationList()}
+                              className="flex w-full flex-col justify-start rounded-lg border border-border/60 bg-background/80 px-4 py-3 text-left shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-colors hover:bg-background dark:bg-background/60 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
+                            >
+                              <div className="flex items-baseline justify-between gap-3">
+                                <span className="ui-field-label font-medium tracking-wide">院校</span>
+                                <p className="text-xl font-semibold tabular-nums tracking-tight text-foreground">
+                                  {dashboardStats.schools}
+                                </p>
+                              </div>
+                            </button>
+                          )}
                         </div>
-                        <div className="rounded-lg border border-border/70 bg-surface-muted px-4 py-3.5">
-                          <span className="ui-field-label font-medium tracking-wide">进行中</span>
-                          <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
-                            {dashboardStats.active}
-                          </p>
+                        <div
+                          className="flex w-full shrink-0 flex-col gap-3 sm:w-[11.25rem] md:w-48"
+                          aria-label="申请指标"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => jumpToApplicationList()}
+                            className="flex flex-col justify-start rounded-lg border border-border/60 bg-background/80 px-4 py-3 text-left shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-colors hover:bg-background dark:bg-background/60 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
+                          >
+                            <div className="flex w-full items-baseline justify-between gap-3">
+                              <span className="ui-field-label font-medium tracking-wide">项目</span>
+                              <p className="text-xl font-semibold tabular-nums tracking-tight text-foreground">
+                                {dashboardStats.programs}
+                              </p>
+                            </div>
+                          </button>
+                          <div className="flex flex-col justify-start rounded-lg border border-border/60 bg-background/80 px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:bg-background/60 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
+                            <div className="flex w-full items-baseline justify-between gap-3">
+                              <span className="ui-field-label font-medium tracking-wide">待申请</span>
+                              <p className="text-xl font-semibold tabular-nums tracking-tight text-foreground">
+                                {dashboardStats.todo}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex flex-col justify-start rounded-lg border border-border/60 bg-background/80 px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:bg-background/60 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
+                            <div className="flex w-full items-baseline justify-between gap-3">
+                              <span className="ui-field-label font-medium tracking-wide">进行中</span>
+                              <p className="text-xl font-semibold tabular-nums tracking-tight text-foreground">
+                                {dashboardStats.active}
+                              </p>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </section>
+                        <div
+                          className="flex w-full min-w-0 flex-col gap-2 rounded-lg border border-border/60 bg-background/80 px-3 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:bg-background/60 sm:flex-1 sm:self-stretch md:px-4 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
+                          aria-label="即将截止的申请"
+                        >
+                          <div className="flex items-center gap-2 border-b border-border/40 pb-2">
+                            <CalendarClock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                            <span className="ui-field-label font-medium tracking-wide text-foreground">
+                              即将截止
+                            </span>
+                            <span className="ml-auto text-[10px] tabular-nums text-muted-foreground">
+                              最近 {DASHBOARD_UPCOMING_DEADLINE_COUNT} 条
+                            </span>
+                          </div>
+                          {upcomingDeadlinePrograms.length === 0 ? (
+                            <p className="text-xs leading-relaxed text-muted-foreground">
+                              当前列表中暂无未过期的固定截止日期（滚动录取或未标注日期的项目不会出现在此）。
+                            </p>
+                          ) : (
+                            <ul className="space-y-0.5">
+                              {upcomingDeadlinePrograms.map(({ program, school, ts }) => {
+                                const urgent =
+                                  ts - Date.now() < 14 * 24 * 60 * 60 * 1000;
+                                return (
+                                  <li key={program.id}>
+                                    <button
+                                      type="button"
+                                      onClick={() => openProgramDetail(program)}
+                                      className="flex w-full min-w-0 flex-col gap-0.5 rounded-md px-2 py-2 text-left transition-colors hover:bg-muted/80"
+                                    >
+                                      <span className="truncate text-xs font-medium text-foreground">
+                                        {primaryProgramLabel(program)}
+                                      </span>
+                                      <span className="truncate text-[11px] text-muted-foreground">
+                                        {school.nameEn}
+                                      </span>
+                                      <span
+                                        className={cn(
+                                          "text-[11px] tabular-nums",
+                                          urgent
+                                            ? "font-medium text-amber-800 dark:text-amber-200"
+                                            : "text-muted-foreground"
+                                        )}
+                                      >
+                                        截止 {formatDeadlineDateShort(ts)}
+                                      </span>
+                                    </button>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => jumpToApplicationList()}
+                            className="mt-1 w-full rounded-md px-2 py-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                          >
+                            查看申请列表
+                          </button>
+                        </div>
+                    </div>
                   ) : null}
 
                 </section>
@@ -1567,13 +1986,6 @@ export default function WorkspacePage() {
                 </div>
               )}
 
-              {!selectedSchool && !selectedProgramPair && activeView === "dashboard" && addedPrograms.length > 0 && (
-                <div id="workspace-application-list" className="mb-4 flex items-center gap-2">
-                  <LayoutDashboard className="h-4 w-4 text-muted-foreground" aria-hidden />
-                  <h2 className="text-sm font-medium text-foreground">申请列表</h2>
-                </div>
-              )}
-
               {!selectedProgramPair && activeView === "dashboard" &&
               (addedPrograms.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border p-12 text-center">
@@ -1594,106 +2006,61 @@ export default function WorkspacePage() {
                   当前筛选下没有项目，试试清空搜索或切换左侧视图。
                 </div>
               ) : (
-                <div className="space-y-6">
-                  {groupedBySchool.map(({ school, programs }) => {
-                    const hideSchoolHeader = selectedSchoolId === school.id;
+                <div id="workspace-application-list" className="space-y-4 md:space-y-5">
+                  {TIER_ORDER.map((tier) => {
+                    const row = programsByTier[tier];
+                    if (row.length === 0) return null;
                     return (
-                    <div key={school.id} className="overflow-hidden rounded-lg border border-border bg-card">
-                      {!hideSchoolHeader && (
-                        <div className="flex items-center gap-3 border-b border-border bg-surface-muted px-4 py-3">
-                          <SchoolLogoMark school={school} size="row" rounded="md" />
-                          <div className="min-w-0 flex-1">
-                            <h3 className="font-medium text-foreground">{school.name}</h3>
-                            <p className="text-xs text-muted-foreground">{school.nameEn}</p>
-                          </div>
-                          <span className="text-xs text-muted-foreground">{programs.length}</span>
-                        </div>
-                      )}
-
-                      <div className="divide-y divide-border">
-                        {programs.map((program) => {
-                          const status = applications[program.id] || "todo";
-                          const statusInfo = statusConfig[status];
-                          const useDetailedCard = selectedSchoolId === school.id;
-                          const showOpenDeadline = isApplicationOpen(program.deadline);
-
-                          return (
-                            <div
-                              key={program.id}
-                              className={cn(
-                                "p-3.5 sm:p-4",
-                                useDetailedCard
-                                  ? "space-y-3"
-                                  : "flex flex-col gap-3 transition-colors hover:bg-surface-muted sm:flex-row sm:items-center sm:justify-between"
-                              )}
-                            >
-                              {useDetailedCard ? (
-                                <div className="space-y-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => openProgramDetail(program)}
-                                    className="block w-full px-1 py-1.5 text-left transition-colors hover:bg-surface-muted"
-                                  >
-                                  <div className="flex items-start justify-between gap-2">
-                                    <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                                      {program.nameEn}
-                                    </p>
-                                    <Badge variant="outline" className={cn("font-normal", statusInfo.color)}>
-                                      {statusInfo.label}
-                                    </Badge>
-                                  </div>
-                                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                                    <span>{program.degree}</span>
-                                    <span aria-hidden>·</span>
-                                    <span>{program.duration}</span>
-                                    <span aria-hidden>·</span>
-                                    <span>{program.deadline}</span>
-                                  </div>
-                                  {programIdsWithDrafts.has(program.id) && (
-                                    <p className="mt-1.5 text-xs text-muted-foreground">已保存草稿</p>
-                                  )}
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="min-w-0 flex-1">
-                                  <div className="mb-1 flex flex-wrap items-center gap-2">
-                                    <h4 className="font-medium text-foreground">{program.nameEn}</h4>
-                                    <Badge variant="outline" className={cn("font-normal", statusInfo.color)}>
-                                      {statusInfo.label}
-                                    </Badge>
-                                  </div>
-                                  <p className="text-xs text-muted-foreground">
-                                    {program.degree} · {program.duration} · {program.tuition}
-                                  </p>
-                                  {showOpenDeadline && (
-                                    <p className="mt-1.5 inline-flex rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/35 dark:text-amber-200">
-                                      截止 {program.deadline}
-                                    </p>
-                                  )}
-                                </div>
-                              )}
-
-                              <div className={cn("flex shrink-0 flex-wrap items-center gap-1.5", useDetailedCard && "hidden")}>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-9 w-9 rounded-xl shadow-none"
-                                      aria-label="查看项目"
-                                      onClick={() => openProgramDetail(program)}
-                                    >
-                                      <ChevronRight className="h-4 w-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="bottom">查看项目</TooltipContent>
-                                </Tooltip>
-                              </div>
+                      <section key={tier} className="min-w-0">
+                        <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                          {TIER_SECTION_LABEL[tier]}
+                        </h3>
+                        <DndContext
+                          sensors={applicationListSensors}
+                          collisionDetection={closestCenter}
+                          onDragEnd={(event: DragEndEvent) => {
+                            const { active, over } = event;
+                            if (!over || active.id === over.id) return;
+                            const ids = row.map(({ program: p }) => p.id);
+                            const oldIndex = ids.indexOf(String(active.id));
+                            const newIndex = ids.indexOf(String(over.id));
+                            if (oldIndex < 0 || newIndex < 0) return;
+                            const newOrder = arrayMove(ids, oldIndex, newIndex);
+                            const next = reorderDisplayedProgramsInFullOrder(
+                              addedProgramIds,
+                              ids,
+                              newOrder
+                            );
+                            setAddedProgramIds(next);
+                            localStorage.setItem("edumatch_added_programs", JSON.stringify(next));
+                            setLiveMessage("已更新列表排序");
+                          }}
+                        >
+                          <SortableContext
+                            items={row.map(({ program: p }) => p.id)}
+                            strategy={rectSortingStrategy}
+                          >
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-2.5 md:grid-cols-3 md:gap-3">
+                              {row.map(({ program, school }) => {
+                                const status = applications[program.id] || "todo";
+                                const showOpenDeadline = isApplicationOpen(program.deadline);
+                                return (
+                                  <SortableWorkspaceApplicationCard
+                                    key={program.id}
+                                    program={program}
+                                    school={school}
+                                    onOpen={() => openProgramDetail(program)}
+                                    statusMenu={renderStatusMenu(program.id, status, true)}
+                                    deadlineLabel={
+                                      showOpenDeadline ? `截止 ${program.deadline}` : null
+                                    }
+                                  />
+                                );
+                              })}
                             </div>
-                          );
-                        })}
-                      </div>
-                    </div>
+                          </SortableContext>
+                        </DndContext>
+                      </section>
                     );
                   })}
                 </div>
@@ -1702,6 +2069,153 @@ export default function WorkspacePage() {
           </main>
         </div>
       </div>
+
+      <Dialog open={workspaceCommandOpen} onOpenChange={setWorkspaceCommandOpen}>
+        <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-[560px]" showCloseButton>
+          <DialogHeader className="sr-only">
+            <DialogTitle>工作台搜索</DialogTitle>
+            <DialogDescription>搜索并跳转到导航、学校、项目或文书草稿</DialogDescription>
+          </DialogHeader>
+          <Command
+            shouldFilter
+            loop
+            label="工作台搜索"
+            className="rounded-lg border-0 shadow-none [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]]:px-1.5 [&_[cmdk-input-wrapper]]:h-11 [&_[cmdk-input]]:h-11 [&_[cmdk-item]]:py-2.5"
+          >
+            <CommandInput
+              placeholder="搜索项目、学校与文书…"
+              value={searchQuery}
+              onValueChange={setSearchQuery}
+            />
+            <CommandList className="max-h-[min(52vh,440px)]">
+              <CommandEmpty className="py-8 text-center text-sm text-muted-foreground">
+                没有匹配结果
+              </CommandEmpty>
+              <CommandGroup heading="导航">
+                <CommandItem
+                  value="主页 首页 dashboard home"
+                  onSelect={() => {
+                    finishWorkspaceCommand();
+                    setSelectedSchoolId(null);
+                    setSelectedProgramId(null);
+                    setActiveView("dashboard");
+                    setLiveMessage("已切换到主页");
+                  }}
+                >
+                  <House className="h-4 w-4" />
+                  <span className="font-medium">主页</span>
+                  <span className="ml-1 truncate text-xs text-muted-foreground">工作台概览与申请列表</span>
+                </CommandItem>
+                <CommandItem
+                  value="我的背景 背景 简历 questionnaire"
+                  onSelect={() => {
+                    finishWorkspaceCommand();
+                    openBackgroundSummary();
+                    setLiveMessage("已打开我的背景");
+                  }}
+                >
+                  <FileText className="h-4 w-4" />
+                  <span className="font-medium">我的背景</span>
+                  <span className="ml-1 truncate text-xs text-muted-foreground">问卷与经历摘要</span>
+                </CommandItem>
+              </CommandGroup>
+              {schoolsInWorkspace.length > 0 ? (
+                <CommandGroup heading="学校">
+                  {schoolsInWorkspace.map((school) => (
+                    <CommandItem
+                      key={school.id}
+                      value={`${school.name} ${school.nameEn} school`}
+                      onSelect={() => {
+                        finishWorkspaceCommand();
+                        selectSchool(school.id);
+                        setActiveView("dashboard");
+                        setLiveMessage(`已选择 ${school.name}`);
+                      }}
+                    >
+                      <SchoolLogoMark school={school} size="sidebar" rounded="md" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{school.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">{school.nameEn}</p>
+                      </div>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ) : null}
+              {addedPrograms.length > 0 ? (
+                <CommandGroup heading="申请项目">
+                  {addedPrograms.map(({ program, school }) => (
+                    <CommandItem
+                      key={program.id}
+                      value={`${program.name} ${program.nameEn} ${school.name} ${school.nameEn} program`}
+                      onSelect={() => {
+                        finishWorkspaceCommand();
+                        setActiveView("dashboard");
+                        openProgramDetail(program);
+                      }}
+                    >
+                      <File className="h-4 w-4 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{primaryProgramLabel(program)}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          — {school.name} / {program.nameEn}
+                        </p>
+                      </div>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ) : null}
+              {draftSummaries.length > 0 ? (
+                <CommandGroup heading="文书草稿">
+                  {draftSummaries.map((d) => (
+                    <CommandItem
+                      key={d.programId}
+                      value={`${labelForDraftProgram(d.programId)} ${d.kinds.map((k) => DOCUMENT_DRAFT_LABELS[k]).join(" ")}`}
+                      onSelect={() => {
+                        finishWorkspaceCommand();
+                        router.push(`/workspace/write/${d.programId}`);
+                      }}
+                    >
+                      <PenLine className="h-4 w-4 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{abbrevLabelForDraftProgram(d.programId)}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          — 文书 / {d.kinds.map((k) => DOCUMENT_DRAFT_LABELS[k]).join("、")}
+                        </p>
+                      </div>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ) : null}
+            </CommandList>
+          </Command>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/80 bg-muted/25 px-3 py-2 text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <kbd className="pointer-events-none rounded border border-border/80 bg-background px-1 font-mono text-[10px]">
+                ↵
+              </kbd>
+              打开
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <kbd className="pointer-events-none rounded border border-border/80 bg-background px-1 font-mono text-[10px]">
+                Esc
+              </kbd>
+              关闭
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <kbd className="pointer-events-none rounded border border-border/80 bg-background px-1 font-mono text-[10px]">
+                ⌘K
+              </kbd>
+              唤起
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <kbd className="pointer-events-none rounded border border-border/80 bg-background px-1 font-mono text-[10px]">
+                ⌘L
+              </kbd>
+              复制链接
+            </span>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={usageGuideOpen} onOpenChange={setUsageGuideOpen}>
         <DialogContent className="flex max-h-[min(88vh,720px)] max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
@@ -1789,10 +2303,14 @@ export default function WorkspacePage() {
                   工作台操作
                 </h3>
                 <ul className="list-inside list-disc space-y-2">
-                  <li>左侧「仪表盘」与学校列表可切换视图；顶部搜索可过滤项目。</li>
-                  <li>「仪表盘」主区包含指标卡片与快速入口；列表在下方。</li>
-                  <li>列表中可改申请状态；「写文书」进入草稿编辑，草稿保存在本机浏览器。</li>
-                  <li>侧栏「我的文书」汇总有内容的草稿；返回本页或切换窗口后会自动刷新状态。</li>
+                  <li>
+                    左侧「浏览」中点击搜索或按 ⌘K（Windows 为 Ctrl+K）打开命令面板，过滤并跳转到主页、学校、项目或文书；主区列表会随搜索关键字同步筛选。
+                  </li>
+                  <li>「主页」主区包含指标卡片与快速入口；列表在下方。</li>
+                  <li>
+                    申请列表按冲刺 / 主申 / 保底分组，宽屏下三列紧凑卡片；同档内可拖动排序。列表中可改申请状态；「写文书」进入草稿编辑，草稿保存在本机浏览器。
+                  </li>
+                  <li>侧栏「文书」汇总有内容的草稿；返回本页或切换窗口后会自动刷新状态。</li>
                 </ul>
               </section>
             </div>
@@ -1805,32 +2323,10 @@ export default function WorkspacePage() {
           side="left"
           className="flex min-h-0 w-[280px] flex-col gap-0 border-r border-border/80 bg-sidebar p-0 sm:max-w-[280px]"
         >
-          <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
-            <Link href="/" className="flex min-w-0 items-center gap-2" onClick={() => setMobileSidebarOpen(false)}>
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary">
-                <Sparkles className="h-4 w-4 text-primary-foreground" />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">EduMatch</p>
-                <p className="truncate text-xs text-muted-foreground">申请工作台</p>
-              </div>
-            </Link>
-          </div>
-          <div className="shrink-0 border-b border-border p-3">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="搜索…"
-                className="h-9 border-border/80 bg-background/80 pl-8 text-sm shadow-none"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-          </div>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]">
             <div className="py-3">{sidebarBody({ onPick: () => setMobileSidebarOpen(false) })}</div>
-            {sidebarFooter({ onPick: () => setMobileSidebarOpen(false) })}
           </div>
+          {sidebarFooter({ onPick: () => setMobileSidebarOpen(false) })}
         </SheetContent>
       </Sheet>
     </div>

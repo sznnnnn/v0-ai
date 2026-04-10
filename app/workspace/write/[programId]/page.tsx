@@ -6,6 +6,7 @@ import {
   buildDraftPreviewForScene,
   type DraftPreviewSceneId,
 } from "@/lib/document-draft-demos";
+import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -20,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ArrowLeft, Check, Eye, FileText, Languages, Plus, Sparkles } from "lucide-react";
+import { ArrowLeft, Check, Eye, FileText, Plus, Sparkles } from "lucide-react";
 import { GuestBanner } from "@/components/questionnaire/guest-banner";
 import { useMatchResult, useQuestionnaire } from "@/hooks/use-questionnaire";
 import {
@@ -617,7 +618,14 @@ export default function WriteDocumentPage() {
                           disabled={translateState === "translating" || !zhContent.trim()}
                           onClick={toggleLanguage}
                         >
-                          <Languages className="h-4 w-4" />
+                          <Image
+                            src="/icons/document-translate.png"
+                            alt=""
+                            width={16}
+                            height={16}
+                            className="h-4 w-4 object-contain"
+                            aria-hidden
+                          />
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent side="bottom">
