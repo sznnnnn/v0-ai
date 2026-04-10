@@ -458,19 +458,8 @@ export default function MatchPage() {
                       {filteredPrograms.length}
                     </span>
                   </div>
-                  {selectedSchool ? (
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      当前院校：{selectedSchool.nameEn}
-                    </p>
-                  ) : (
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      勾选项目后加入工作台；左侧可筛选分档与学校。
-                    </p>
-                  )}
-                  <p className="text-ui-label leading-relaxed text-muted-foreground">
-                    {defaultPs?.trim()
-                      ? "当前推荐已参考你的默认文书；可在文书页手动更新后重新匹配。"
-                      : "当前推荐基于问卷信息；首次生成并保存文书后会自动形成默认文书。"}
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    基于海量院校库为您精选以下项目
                   </p>
                 </div>
                 <Button
