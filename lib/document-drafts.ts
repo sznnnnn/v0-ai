@@ -143,8 +143,14 @@ function readTemplateSourceMeta(): TemplateSourceMeta {
   return { sourceProgramId: null };
 }
 
-function writeTemplateSourceMeta(meta: TemplateSourceMeta): void {
-  localStorage.setItem(TEMPLATE_SOURCE_META_KEY, JSON.stringify(meta));
+function writeTemplateSourceMeta(meta: TemplateSourceMeta): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    localStorage.setItem(TEMPLATE_SOURCE_META_KEY, JSON.stringify(meta));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function readTemplateKind(kind: DocumentDraftKind): string | null {
@@ -525,6 +531,30 @@ function syncTemplateKindsFromProgram(programId: string): void {
   }
 }
 
+/** 当前星标模版来源项目 id（无则 null） */
+export function getTemplateSourceProgramId(): string | null {
+  return readTemplateSourceMeta().sourceProgramId;
+}
+
+/** 判断某项目是否为当前星标模版来源 */
+export function isTemplateSourceProgram(programId: string): boolean {
+  return getTemplateSourceProgramId() === programId;
+}
+
+/** 将某项目设为星标模版来源，并立即同步该项目已有草稿到模版库 */
+export function setTemplateSourceProgram(programId: string): boolean {
+  if (!programId) return false;
+  const ok = writeTemplateSourceMeta({ sourceProgramId: programId });
+  if (!ok) return false;
+  syncTemplateKindsFromProgram(programId);
+  return true;
+}
+
+/** 清除当前星标模版来源 */
+export function clearTemplateSourceProgram(): boolean {
+  return writeTemplateSourceMeta({ sourceProgramId: null });
+}
+
 function updateTemplateAfterSave(programId: string, kind: DocumentDraftKind, content: string): void {
   if (typeof window === "undefined") return;
   if (!content.trim()) return;
@@ -620,6 +650,26 @@ export function getProgramIdsWithSavedDrafts(): Set<string> {
     }
   }
   return ids;
+}
+
+/** 清空某个项目下全部文书草稿与版本（用于「创建新的」） */
+export function clearProgramDrafts(programId: string): void {
+  const draftStore = readDraftStore();
+  const draftPrefix = `${programId}::`;
+  for (const key of Object.keys(draftStore)) {
+    if (key.startsWith(draftPrefix)) {
+      delete draftStore[key];
+    }
+  }
+  writeDraftStore(draftStore);
+
+  const versionStore = readDraftVersionStore();
+  for (const key of Object.keys(versionStore)) {
+    if (key.startsWith(draftPrefix)) {
+      delete versionStore[key];
+    }
+  }
+  writeDraftVersionStore(versionStore);
 }
 
 /** 有非空内容的文书，按项目聚合，用于工作台「我的文书」列表 */

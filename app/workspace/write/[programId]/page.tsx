@@ -8,7 +8,7 @@ import {
 } from "@/lib/document-draft-demos";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,11 +36,13 @@ import {
   Plus,
   SendHorizonal,
   Sparkles,
+  Star,
   TriangleAlert,
   XCircle,
 } from "lucide-react";
 import { useMatchResult, useQuestionnaire } from "@/hooks/use-questionnaire";
 import {
+  clearTemplateSourceProgram,
   type DocumentDraftKind,
   type DraftWorkflowState,
   type IntentHistoryItem,
@@ -57,6 +59,8 @@ import {
   type MicroTaskStage,
   getDraft,
   getProgramIdsWithSavedDrafts,
+  isTemplateSourceProgram,
+  setTemplateSourceProgram,
   type DraftContext,
 } from "@/lib/document-drafts";
 import type { QuestionnaireData } from "@/lib/types";
@@ -79,6 +83,34 @@ function draftContextFromPair(pair: {
 
 function buildPsDraft(ctx: DraftContext, q: QuestionnaireData): string {
   return buildDraftSeed("ps", ctx, q);
+}
+
+function buildPsDraftFromNarrativeAnswers(
+  ctx: DraftContext,
+  q: QuestionnaireData,
+  narrativeAnswers?: Record<string, { selectedOption?: string; customText?: string }>
+): string {
+  if (!narrativeAnswers) return buildPsDraft(ctx, q);
+  const orderedKeys = [
+    { key: "origin", title: "1. 你是谁，你的故事从何开始" },
+    { key: "challenge_action_reflection", title: "2. 你的经历如何塑造了你" },
+    { key: "industry_insight", title: "3. 你对专业的深刻理解" },
+    { key: "fit_with_program", title: "4. 你与项目的匹配度" },
+    { key: "future_plan", title: "5. 你的未来规划" },
+  ] as const;
+  const blocks: string[] = [];
+  for (const item of orderedKeys) {
+    const answer = narrativeAnswers[item.key];
+    if (!answer) continue;
+    const lineA = answer.selectedOption?.trim();
+    const lineB = answer.customText?.trim();
+    if (!lineA && !lineB) continue;
+    blocks.push(
+      `${item.title}\n${lineA ? `标签：${lineA}\n` : ""}${lineB ?? ""}`.trim()
+    );
+  }
+  if (blocks.length === 0) return buildPsDraft(ctx, q);
+  return `${buildProjectHeader(ctx)}${blocks.join("\n\n")}\n`;
 }
 
 type BackgroundMaterial = {
@@ -335,6 +367,7 @@ function buildCritiqueRanges(text: string, critiques: DemoCritique[]): CritiqueR
 
 export default function WriteDocumentPage() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const programId = useMemo(() => {
     const parts = pathname.split("/").filter(Boolean);
@@ -343,6 +376,7 @@ export default function WriteDocumentPage() {
   }, [pathname]);
   const { result, isLoaded: matchLoaded } = useMatchResult();
   const { data: questionnaireData, isLoaded: questionnaireLoaded } = useQuestionnaire();
+  const forceFresh = searchParams.get("mode") === "fresh";
 
   const [addedIds, setAddedIds] = useState<string[]>([]);
   const [addedIdsReady, setAddedIdsReady] = useState(false);
@@ -378,6 +412,7 @@ export default function WriteDocumentPage() {
   const [critiqueRanges, setCritiqueRanges] = useState<CritiqueRange[]>([]);
   const [scanState, setScanState] = useState<"idle" | "scanning">("idle");
   const [feedbackText, setFeedbackText] = useState<string | null>(null);
+  const [isStarTemplate, setIsStarTemplate] = useState(false);
   const [hoveredCritiqueId, setHoveredCritiqueId] = useState<number | null>(null);
   const [applyingCritiqueId, setApplyingCritiqueId] = useState<number | null>(null);
   const [applyProgress, setApplyProgress] = useState(0);
@@ -419,6 +454,11 @@ export default function WriteDocumentPage() {
 
   useEffect(() => {
     setHasLocalDraft(getProgramIdsWithSavedDrafts().has(programId));
+  }, [programId]);
+
+  useEffect(() => {
+    if (!programId) return;
+    setIsStarTemplate(isTemplateSourceProgram(programId));
   }, [programId]);
 
   const pair = useMemo(() => {
@@ -824,7 +864,9 @@ export default function WriteDocumentPage() {
     seededProgramRef.current = pid;
     setSeedReady(false);
     const ctx = draftContextFromPair(pair);
-    const seeded = getResolvedDraftContent(pid, "ps", ctx, questionnaireData);
+    const seeded = forceFresh
+      ? buildPsDraftFromNarrativeAnswers(ctx, questionnaireData, existing?.workflow?.narrativeAnswers)
+      : getResolvedDraftContent(pid, "ps", ctx, questionnaireData);
     setZhContent(seeded);
     setEnContent("");
     setActiveLanguage("zh-CN");
@@ -856,7 +898,7 @@ export default function WriteDocumentPage() {
     setStructure("classic");
     setMaterialView("all");
     setSeedReady(true);
-  }, [kind, materialPool, pair, questionnaireLoaded, questionnaireData]);
+  }, [forceFresh, kind, materialPool, pair, questionnaireLoaded, questionnaireData]);
 
   useEffect(() => {
     if (!pair || !questionnaireLoaded || !seedReady) return;
@@ -1050,6 +1092,31 @@ export default function WriteDocumentPage() {
                     <p className="truncate text-sm font-medium">个人陈述（PS）</p>
                   </div>
                   <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className={isStarTemplate ? "text-orange-600 hover:text-orange-700" : "text-muted-foreground hover:text-orange-600"}
+                      aria-label={isStarTemplate ? "取消模版文书" : "设为模版文书"}
+                      title={isStarTemplate ? "当前为模版文书，点击取消" : "设为模版文书"}
+                      onClick={() => {
+                        const ok = isStarTemplate
+                          ? clearTemplateSourceProgram()
+                          : setTemplateSourceProgram(programId);
+                        if (!ok) {
+                          setFeedbackText("操作失败：无法写入本地存储，请检查浏览器隐私设置");
+                          return;
+                        }
+                        setIsStarTemplate(isTemplateSourceProgram(programId));
+                        setFeedbackText(
+                          isStarTemplate
+                            ? "已取消模版文书"
+                            : "已设为模版文书：后续新项目将优先套用该文书"
+                        );
+                      }}
+                    >
+                      <Star className={`h-4 w-4 ${isStarTemplate ? "fill-current" : ""}`} />
+                    </Button>
                     <Button
                       type="button"
                       size="icon"

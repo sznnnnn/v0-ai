@@ -17,10 +17,19 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { GuestBanner } from "@/components/questionnaire/guest-banner";
 import { SchoolLogoMark } from "@/components/match/school-logo-mark";
 import { SchoolRichInfo } from "@/components/match/school-rich-info";
 import { useMatchResult } from "@/hooks/use-questionnaire";
+import { clearProgramDrafts, DOCUMENT_DRAFT_ORDER, getDraft } from "@/lib/document-drafts";
 
 const ADDED_PROGRAMS_KEY = "edumatch_added_programs";
 const FAVORITE_PROGRAMS_KEY = "edumatch_favorite_programs";
@@ -55,6 +64,7 @@ export default function ProgramDetailPage() {
   const { result, isLoaded } = useMatchResult();
   const [addedPrograms, setAddedPrograms] = useState<string[]>([]);
   const [favoritePrograms, setFavoritePrograms] = useState<string[]>([]);
+  const [writeChoiceOpen, setWriteChoiceOpen] = useState(false);
 
   useEffect(() => {
     const addedRaw = localStorage.getItem(ADDED_PROGRAMS_KEY);
@@ -131,6 +141,16 @@ export default function ProgramDetailPage() {
     localStorage.setItem(FAVORITE_PROGRAMS_KEY, JSON.stringify(updated));
   };
 
+  const hasExistingDraft = DOCUMENT_DRAFT_ORDER.some((kind) => Boolean(getDraft(program.id, kind)?.content?.trim()));
+
+  const handleWriteClick = () => {
+    if (hasExistingDraft) {
+      setWriteChoiceOpen(true);
+      return;
+    }
+    router.push(`/workspace/write/${program.id}`);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <GuestBanner />
@@ -143,11 +163,9 @@ export default function ProgramDetailPage() {
             </Button>
             <p className="text-sm font-medium text-foreground">项目详情</p>
           </div>
-          <Button asChild size="sm">
-            <Link href={`/workspace/write/${program.id}`}>
-              <FileText className="mr-1.5 h-4 w-4" />
-              写文书
-            </Link>
+          <Button size="sm" onClick={handleWriteClick}>
+            <FileText className="mr-1.5 h-4 w-4" />
+            写文书
           </Button>
         </div>
       </header>
@@ -296,6 +314,35 @@ export default function ProgramDetailPage() {
           </aside>
         </div>
       </main>
+
+      <Dialog open={writeChoiceOpen} onOpenChange={setWriteChoiceOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>检测到已有文书草稿</DialogTitle>
+            <DialogDescription>该项目之前已生成过文书。请选择打开历史版本，或清空并创建新的草稿。</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setWriteChoiceOpen(false);
+                router.push(`/workspace/write/${program.id}`);
+              }}
+            >
+              打开之前的文书
+            </Button>
+            <Button
+              onClick={() => {
+                clearProgramDrafts(program.id);
+                setWriteChoiceOpen(false);
+                router.push(`/workspace/write/${program.id}`);
+              }}
+            >
+              创建新的
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

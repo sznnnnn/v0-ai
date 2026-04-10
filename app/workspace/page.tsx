@@ -12,6 +12,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -51,6 +52,8 @@ import {
   ChevronDown,
   ChevronRight,
   Check,
+  Star,
+  Plus,
   User,
   Briefcase,
   FolderGit2,
@@ -85,9 +88,11 @@ import { useMatchResult, useQuestionnaire } from "@/hooks/use-questionnaire";
 import type { Program, QuestionnaireData, School } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
+  clearProgramDrafts,
   DOCUMENT_DRAFT_LABELS,
   DOCUMENT_DRAFT_ORDER,
   getDraft,
+  getTemplateSourceProgramId,
   listProgramDraftSummaries,
   type DocumentDraftKind,
 } from "@/lib/document-drafts";
@@ -135,7 +140,7 @@ const notionTagPalette = [
 const getNotionTagClass = (index: number) => notionTagPalette[index % notionTagPalette.length];
 const statusOptions = Object.keys(statusConfig) as Array<keyof typeof statusConfig>;
 
-type SchoolDraftSheetItem = {
+type ProgramDraftSheetItem = {
   programId: string;
   programNameEn: string;
   kind: DocumentDraftKind;
@@ -223,6 +228,20 @@ function primaryProgramLabel(program: Program) {
   const zh = program.name?.trim();
   if (zh) return zh;
   return program.nameEn;
+}
+
+function tokenizeSimilarityText(text: string): string[] {
+  return (text.toLowerCase().match(/[\u4e00-\u9fff]{2,}|[a-z]{3,}/g) ?? []).slice(0, 120);
+}
+
+function overlapCount(a: string[], b: string[]): number {
+  if (a.length === 0 || b.length === 0) return 0;
+  const set = new Set(b);
+  let n = 0;
+  for (const item of a) {
+    if (set.has(item)) n += 1;
+  }
+  return n;
 }
 
 function WorkspaceApplicationCardTooltipBody({
@@ -407,9 +426,18 @@ export default function WorkspacePage() {
   const [draftRefresh, setDraftRefresh] = useState(0);
   /** 避免在首屏 render 中读 localStorage，与 SSR 空草稿树一致，消除 hydration mismatch */
   const [draftStorageReady, setDraftStorageReady] = useState(false);
-  const [showAllSchoolDrafts, setShowAllSchoolDrafts] = useState(false);
+  const [showAllProgramDrafts, setShowAllProgramDrafts] = useState(false);
   const [usageGuideOpen, setUsageGuideOpen] = useState(false);
+  const [addProgramDialogOpen, setAddProgramDialogOpen] = useState(false);
+  const [addProgramQuery, setAddProgramQuery] = useState("");
+  const [expandedAddProgramId, setExpandedAddProgramId] = useState<string | null>(null);
   const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
+  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
+  const [pendingRemoveProgramId, setPendingRemoveProgramId] = useState<string | null>(null);
+  const [pendingRemoveSchoolId, setPendingRemoveSchoolId] = useState<string | null>(null);
+  const [writeChoiceOpen, setWriteChoiceOpen] = useState(false);
+  const [pendingWriteProgramId, setPendingWriteProgramId] = useState<string | null>(null);
+  const [writeChoiceMode, setWriteChoiceMode] = useState<"existing" | "create">("create");
   const [liveMessage, setLiveMessage] = useState("");
   const [expandedSections, setExpandedSections] = useState({
     overview: false,
@@ -432,8 +460,8 @@ export default function WorkspacePage() {
   }, []);
 
   useEffect(() => {
-    setShowAllSchoolDrafts(false);
-  }, [selectedSchoolId]);
+    setShowAllProgramDrafts(false);
+  }, [selectedProgramId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -499,6 +527,11 @@ export default function WorkspacePage() {
     void draftRefresh;
     return listProgramDraftSummaries();
   }, [draftStorageReady, draftRefresh, addedProgramIds.length]);
+  const templateSourceProgramId = useMemo(() => {
+    if (!draftStorageReady) return null;
+    void draftRefresh;
+    return getTemplateSourceProgramId();
+  }, [draftStorageReady, draftRefresh]);
 
   const labelForDraftProgram = (programId: string) => {
     if (!result) return programId;
@@ -557,6 +590,71 @@ export default function WorkspacePage() {
       })
       .filter(Boolean) as { program: Program; school: School }[];
   }, [result, addedProgramIds]);
+
+  const addablePrograms = useMemo(() => {
+    if (!result) return [];
+    const added = new Set(addedProgramIds);
+    return result.programs
+      .filter((program) => !added.has(program.id))
+      .map((program) => {
+        const school = result.schools.find((s) => s.id === program.schoolId);
+        if (!school) return null;
+        return { program, school };
+      })
+      .filter(Boolean) as { program: Program; school: School }[];
+  }, [result, addedProgramIds]);
+
+  const filteredAddablePrograms = useMemo(() => {
+    const q = addProgramQuery.trim().toLowerCase();
+    const filtered = !q
+      ? addablePrograms
+      : addablePrograms.filter(
+      ({ program, school }) =>
+        program.name.toLowerCase().includes(q) ||
+        program.nameEn.toLowerCase().includes(q) ||
+        school.name.toLowerCase().includes(q) ||
+        school.nameEn.toLowerCase().includes(q)
+      );
+    return filtered;
+  }, [addablePrograms, addProgramQuery]);
+
+  const intendedMajorTokens = useMemo(
+    () => tokenizeSimilarityText(questionnaireData.personalInfo.intendedMajor ?? ""),
+    [questionnaireData.personalInfo.intendedMajor]
+  );
+  const currentFocusTokens = useMemo(() => {
+    const text = addedPrograms
+      .map(({ program }) => `${program.name} ${program.nameEn} ${program.department}`)
+      .join(" ");
+    return tokenizeSimilarityText(text);
+  }, [addedPrograms]);
+  const addProgramScoreById = useMemo(() => {
+    const score = new Map<string, number>();
+    for (const { program } of addablePrograms) {
+      const programTokens = tokenizeSimilarityText(`${program.name} ${program.nameEn} ${program.department}`);
+      const intendedOverlap = overlapCount(programTokens, intendedMajorTokens);
+      const focusOverlap = overlapCount(programTokens, currentFocusTokens);
+      score.set(program.id, intendedOverlap * 3 + focusOverlap);
+    }
+    return score;
+  }, [addablePrograms, intendedMajorTokens, currentFocusTokens]);
+  const recommendedProgramIds = useMemo(() => {
+    const ranked = [...addablePrograms]
+      .map(({ program }) => ({ id: program.id, score: addProgramScoreById.get(program.id) ?? 0 }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8);
+    return new Set(ranked.map((x) => x.id));
+  }, [addProgramScoreById, addablePrograms]);
+  const sortedFilteredAddablePrograms = useMemo(() => {
+    return [...filteredAddablePrograms].sort((a, b) => {
+      const sa = addProgramScoreById.get(a.program.id) ?? 0;
+      const sb = addProgramScoreById.get(b.program.id) ?? 0;
+      if (sb !== sa) return sb - sa;
+      if (a.school.ranking !== b.school.ranking) return a.school.ranking - b.school.ranking;
+      return a.program.nameEn.localeCompare(b.program.nameEn);
+    });
+  }, [filteredAddablePrograms, addProgramScoreById]);
 
   const searchFiltered = useMemo(() => {
     if (!searchQuery) return addedPrograms;
@@ -622,41 +720,6 @@ export default function WorkspacePage() {
     return schoolsInWorkspace.find((s) => s.id === selectedSchoolId) ?? null;
   }, [selectedSchoolId, schoolsInWorkspace]);
 
-  const schoolDraftSheets = useMemo((): SchoolDraftSheetItem[] => {
-    void draftRefresh;
-    if (!selectedSchoolId) return [];
-    if (!draftStorageReady) return [];
-    const sheets: SchoolDraftSheetItem[] = [];
-    for (const { program, school } of addedPrograms) {
-      if (school.id !== selectedSchoolId) continue;
-      for (const kind of DOCUMENT_DRAFT_ORDER) {
-        const d = getDraft(program.id, kind);
-        const text = d?.content?.trim();
-        if (!d || !text) continue;
-        const collapsed = text.replace(/\s+/g, " ");
-        const truncated = collapsed.length > 320;
-        const preview = collapsed.slice(0, 320);
-        sheets.push({
-          programId: program.id,
-          programNameEn: program.nameEn,
-          kind,
-          preview: truncated ? `${preview}…` : preview,
-          updatedAt: d.updatedAt,
-        });
-      }
-    }
-    return sheets.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
-  }, [selectedSchoolId, addedPrograms, draftRefresh, draftStorageReady]);
-
-  const schoolDraftSheetsLimit = 6;
-  const visibleSchoolDraftSheets = useMemo(() => {
-    if (showAllSchoolDrafts || schoolDraftSheets.length <= schoolDraftSheetsLimit) {
-      return schoolDraftSheets;
-    }
-    return schoolDraftSheets.slice(0, schoolDraftSheetsLimit);
-  }, [schoolDraftSheets, showAllSchoolDrafts]);
-  const schoolDraftSheetsNeedExpand = schoolDraftSheets.length > schoolDraftSheetsLimit;
-
   const selectedProgramPair = useMemo(() => {
     if (!result || !selectedProgramId) return null;
     const program = result.programs.find((p) => p.id === selectedProgramId);
@@ -666,10 +729,53 @@ export default function WorkspacePage() {
     return { program, school };
   }, [result, selectedProgramId]);
 
+  const selectedProgramDraftSheets = useMemo((): ProgramDraftSheetItem[] => {
+    void draftRefresh;
+    if (!selectedProgramPair) return [];
+    if (!draftStorageReady) return [];
+    const sheets: ProgramDraftSheetItem[] = [];
+    const program = selectedProgramPair.program;
+    for (const kind of DOCUMENT_DRAFT_ORDER) {
+      const d = getDraft(program.id, kind);
+      const text = d?.content?.trim();
+      if (!d || !text) continue;
+      const collapsed = text.replace(/\s+/g, " ");
+      const truncated = collapsed.length > 320;
+      const preview = collapsed.slice(0, 320);
+      sheets.push({
+        programId: program.id,
+        programNameEn: program.nameEn,
+        kind,
+        preview: truncated ? `${preview}…` : preview,
+        updatedAt: d.updatedAt,
+      });
+    }
+    if (sheets.length === 0) return [];
+    const latest = sheets.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))[0];
+    return latest ? [latest] : [];
+  }, [selectedProgramPair, draftRefresh, draftStorageReady]);
+
+  const selectedProgramDraftSheetsLimit = 6;
+  const visibleSelectedProgramDraftSheets = useMemo(() => {
+    if (showAllProgramDrafts || selectedProgramDraftSheets.length <= selectedProgramDraftSheetsLimit) {
+      return selectedProgramDraftSheets;
+    }
+    return selectedProgramDraftSheets.slice(0, selectedProgramDraftSheetsLimit);
+  }, [selectedProgramDraftSheets, showAllProgramDrafts]);
+  const selectedProgramDraftSheetsNeedExpand = selectedProgramDraftSheets.length > selectedProgramDraftSheetsLimit;
+  const hasSelectedProgramDraft = selectedProgramDraftSheets.length > 0;
+
   const selectedProgramExtra = useMemo(() => {
     if (!selectedProgramPair) return null;
     return getProgramEnrichment(selectedProgramPair.program, selectedProgramPair.school);
   }, [selectedProgramPair]);
+
+  const openWriteFlow = (programId: string) => {
+    const hasExistingDraft = DOCUMENT_DRAFT_ORDER.some((kind) => Boolean(getDraft(programId, kind)?.content?.trim()));
+    setPendingWriteProgramId(programId);
+    setWriteChoiceMode(hasExistingDraft ? "existing" : "create");
+    setWriteChoiceOpen(true);
+  };
 
   /** 与当前主列表一致（含搜索筛选）的主页指标 */
   const dashboardStats = useMemo(() => {
@@ -765,6 +871,51 @@ export default function WorkspacePage() {
     const updated = addedProgramIds.filter((id) => id !== programId);
     setAddedProgramIds(updated);
     localStorage.setItem("edumatch_added_programs", JSON.stringify(updated));
+    if (selectedProgramId === programId) {
+      setSelectedProgramId(null);
+    }
+  };
+
+  const requestRemoveProgram = (programId: string) => {
+    setPendingRemoveSchoolId(null);
+    setPendingRemoveProgramId(programId);
+    setRemoveConfirmOpen(true);
+  };
+
+  const removeSchool = (schoolId: string) => {
+    const idsToRemove = new Set(
+      addedPrograms.filter(({ school }) => school.id === schoolId).map(({ program }) => program.id)
+    );
+    if (idsToRemove.size === 0) return;
+    const updated = addedProgramIds.filter((id) => !idsToRemove.has(id));
+    setAddedProgramIds(updated);
+    localStorage.setItem("edumatch_added_programs", JSON.stringify(updated));
+    if (selectedProgramId && idsToRemove.has(selectedProgramId)) {
+      setSelectedProgramId(null);
+    }
+    if (selectedSchoolId === schoolId) {
+      setSelectedSchoolId(null);
+    }
+  };
+
+  const requestRemoveSchool = (schoolId: string) => {
+    setPendingRemoveProgramId(null);
+    setPendingRemoveSchoolId(schoolId);
+    setRemoveConfirmOpen(true);
+  };
+
+  const addProgramToWorkspace = (program: Program) => {
+    if (addedProgramIds.includes(program.id)) return;
+    const updated = [...addedProgramIds, program.id];
+    setAddedProgramIds(updated);
+    localStorage.setItem("edumatch_added_programs", JSON.stringify(updated));
+    setSelectedSchoolId(program.schoolId);
+    setSelectedProgramId(program.id);
+    setActiveView("dashboard");
+    setAddProgramDialogOpen(false);
+    setAddProgramQuery("");
+    setExpandedAddProgramId(null);
+    setLiveMessage(`已添加项目：${program.nameEn}`);
   };
 
   const selectSchool = (id: string | null) => {
@@ -783,6 +934,19 @@ export default function WorkspacePage() {
     setSelectedProgramId(program.id);
     setLiveMessage(`已打开项目详情：${program.nameEn}`);
   };
+
+  const pendingRemoveProgramLabel = useMemo(() => {
+    if (!pendingRemoveProgramId || !result) return "";
+    const program = result.programs.find((p) => p.id === pendingRemoveProgramId);
+    if (!program) return "";
+    const school = result.schools.find((s) => s.id === program.schoolId);
+    return school ? `${school.name} · ${program.nameEn}` : program.nameEn;
+  }, [pendingRemoveProgramId, result]);
+  const pendingRemoveSchoolLabel = useMemo(() => {
+    if (!pendingRemoveSchoolId) return "";
+    const school = schoolsInWorkspace.find((s) => s.id === pendingRemoveSchoolId);
+    return school ? school.name : "";
+  }, [pendingRemoveSchoolId, schoolsInWorkspace]);
 
   const renderStatusMenu = (
     programId: string,
@@ -986,7 +1150,23 @@ export default function WorkspacePage() {
       </div>
 
       <div className="px-3 pb-4">
-        <p className="ui-section-heading mb-1.5 px-2">学校</p>
+        <div className="group mb-1.5 flex items-center justify-between px-2">
+          <p className="ui-section-heading">项目</p>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+            aria-label="添加项目"
+            onClick={() => {
+              setAddProgramDialogOpen(true);
+              setAddProgramQuery("");
+              setExpandedAddProgramId(null);
+            }}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        </div>
         {schoolsInWorkspace.length === 0 ? (
           <p className="px-2 text-xs leading-relaxed text-foreground/68">
             请先在选校结果页勾选项目，列表会自动同步
@@ -1000,43 +1180,68 @@ export default function WorkspacePage() {
                 const schoolPrograms = programsBySchool.get(school.id) ?? [];
                 return (
                   <div key={school.id} className="space-y-0.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        selectSchool(active ? null : school.id);
-                        opts.onPick?.();
-                      }}
-                      className={cn(
-                        "group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm transition-colors",
-                        active
-                          ? "bg-interactive-active text-foreground"
-                          : "text-foreground/82 hover:bg-interactive-hover hover:text-foreground"
-                      )}
-                      aria-label={`${school.name}，${count} 个项目`}
-                    >
-                      <SchoolLogoMark school={school} size="sidebar" rounded="md" />
-                      <span className="min-w-0 flex-1 truncate">{school.name}</span>
-                      <span className="text-xs text-foreground/72 tabular-nums opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100">
-                        {count}
-                      </span>
-                    </button>
+                    <div className="group relative">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          selectSchool(active ? null : school.id);
+                          opts.onPick?.();
+                        }}
+                        className={cn(
+                          "group flex w-full items-center gap-2 rounded-md px-2 py-1 pr-8 text-left text-sm transition-colors",
+                          active
+                            ? "bg-interactive-active text-foreground"
+                            : "text-foreground/82 hover:bg-interactive-hover hover:text-foreground"
+                        )}
+                        aria-label={`${school.name}，${count} 个项目`}
+                      >
+                        <SchoolLogoMark school={school} size="sidebar" rounded="md" />
+                        <span className="min-w-0 flex-1 truncate">{school.name}</span>
+                        <span className="text-xs text-foreground/72 tabular-nums opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100">
+                          {count}
+                        </span>
+                      </button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                        aria-label={`移除院校 ${school.name}`}
+                        title="移除院校"
+                        onClick={() => requestRemoveSchool(school.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                      </Button>
+                    </div>
 
                     {active && schoolPrograms.length > 0 && (
                       <div className="ml-8 space-y-0 border-l border-border/60 pl-2">
                         {schoolPrograms.map((program) => (
-                          <button
-                            key={program.id}
-                            type="button"
-                            onClick={() => {
-                              openProgramDetail(program);
-                              opts.onPick?.();
-                            }}
-                            className="flex w-full items-center gap-1.5 rounded-md px-2 py-0.5 text-left text-xs text-foreground/75 transition-colors hover:bg-muted/40 hover:text-foreground"
-                            title={program.nameEn}
-                          >
-                            <File className="h-3.5 w-3.5 shrink-0 text-foreground/65" />
-                            <span className="min-w-0 flex-1 truncate">{program.nameEn}</span>
-                          </button>
+                          <div key={program.id} className="group relative">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                openProgramDetail(program);
+                                opts.onPick?.();
+                              }}
+                              className="flex w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-0.5 pr-8 text-left text-xs text-foreground/75 transition-colors hover:bg-muted/40 hover:text-foreground"
+                              title={program.nameEn}
+                            >
+                              <File className="h-3.5 w-3.5 shrink-0 text-foreground/65" />
+                              <span className="min-w-0 flex-1 truncate">{program.nameEn}</span>
+                            </button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                              aria-label={`移除项目 ${program.nameEn}`}
+                              title="移除项目"
+                              onClick={() => requestRemoveProgram(program.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                            </Button>
+                          </div>
                         ))}
                       </div>
                     )}
@@ -1071,10 +1276,16 @@ export default function WorkspacePage() {
                       <span className="min-w-0 flex-1 truncate text-xs leading-snug text-foreground">
                         {abbrevLabelForDraftProgram(d.programId)}
                       </span>
+                      {templateSourceProgramId === d.programId && (
+                        <Star className="h-3.5 w-3.5 shrink-0 fill-current text-orange-500" />
+                      )}
                     </Link>
                   </TooltipTrigger>
                   <TooltipContent side="right" className="max-w-[min(280px,calc(100vw-3rem))]">
                     <p className="font-medium">{labelForDraftProgram(d.programId)}</p>
+                    {templateSourceProgramId === d.programId && (
+                      <p className="mt-1 text-xs text-orange-600">模版文书</p>
+                    )}
                   </TooltipContent>
                 </Tooltip>
               ))}
@@ -1200,9 +1411,20 @@ export default function WorkspacePage() {
                         <div className="flex items-start gap-3">
                           <SchoolLogoMark school={selectedProgramPair.school} size="row" rounded="md" />
                           <div className="min-w-0 flex-1 space-y-1">
-                            <h2 className="truncate text-lg font-semibold tracking-tight text-foreground sm:text-xl">
-                              {selectedProgramPair.program.nameEn}
-                            </h2>
+                            <div className="flex min-w-0 items-center gap-2">
+                              <h2 className="truncate text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+                                {selectedProgramPair.program.nameEn}
+                              </h2>
+                              {templateSourceProgramId === selectedProgramPair.program.id && (
+                                <Badge
+                                  variant="outline"
+                                  className="h-5 border-orange-200 bg-orange-50 px-1.5 text-[10px] text-orange-700"
+                                >
+                                  <Star className="mr-1 h-3 w-3 fill-current" />
+                                  模版文书
+                                </Badge>
+                              )}
+                            </div>
                             <p className="text-xs leading-relaxed text-muted-foreground">
                               {selectedProgramPair.school.nameEn} · {selectedProgramPair.program.degree} ·{" "}
                               {selectedProgramPair.program.duration}
@@ -1227,12 +1449,16 @@ export default function WorkspacePage() {
                                 </a>
                               </Button>
                             ) : null}
-                            <Button size="sm" className="shrink-0 shadow-sm" asChild>
-                              <Link href={`/workspace/write/${selectedProgramPair.program.id}`}>
+                            {!hasSelectedProgramDraft && (
+                              <Button
+                                size="sm"
+                                className="shrink-0 shadow-sm"
+                                onClick={() => openWriteFlow(selectedProgramPair.program.id)}
+                              >
                                 <PenLine className="h-3.5 w-3.5" />
                                 写文书
-                              </Link>
-                            </Button>
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1456,6 +1682,91 @@ export default function WorkspacePage() {
                         )}
                       </aside>
                     </div>
+
+                    <section className="rounded-lg border border-border bg-card p-4">
+                      <div className="mb-3 flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-muted-foreground" aria-hidden />
+                        <h3 className="text-sm font-medium text-foreground">已保存文书</h3>
+                      </div>
+                      {selectedProgramDraftSheets.length === 0 ? (
+                        <p className="rounded-lg border border-dashed border-border/80 bg-surface-muted px-4 py-6 text-center text-sm text-muted-foreground">
+                          暂无已保存内容。点击上方“写文书”开始起草。
+                        </p>
+                      ) : (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-8 xl:grid-cols-3">
+                            {visibleSelectedProgramDraftSheets.map((sheet) => (
+                              <Link
+                                key={`${sheet.programId}-${sheet.kind}`}
+                                href={`/workspace/write/${sheet.programId}`}
+                                className={cn(
+                                  "group mx-auto block w-full max-w-[280px] outline-none sm:mx-0 sm:max-w-none",
+                                  "focus-visible:rounded-2xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                )}
+                              >
+                                <article
+                                  className={cn(
+                                    "relative flex aspect-[210/297] w-full flex-col overflow-hidden rounded-2xl",
+                                    "border border-border/50 bg-card/80 text-card-foreground backdrop-blur-[2px]",
+                                    "shadow-[0_1px_2px_rgba(15,23,42,0.04)]",
+                                    "transition-[transform,box-shadow,border-color] duration-200 ease-out",
+                                    "group-hover:-translate-y-0.5 group-hover:border-border/70",
+                                    "group-hover:shadow-[0_4px_24px_-4px_rgba(15,23,42,0.07),0_2px_8px_-2px_rgba(15,23,42,0.04)]",
+                                    "dark:shadow-[0_1px_2px_rgba(0,0,0,0.25)]",
+                                    "dark:group-hover:shadow-[0_8px_28px_-6px_rgba(0,0,0,0.35)]"
+                                  )}
+                                >
+                                  <div
+                                    aria-hidden
+                                    className="pointer-events-none absolute inset-x-[7%] top-[8%] h-px bg-border/50"
+                                  />
+                                  <div className="flex min-h-0 flex-1 flex-col px-[9%] pb-[8%] pt-[12%]">
+                                    <div className="flex items-start justify-between gap-2 border-b border-border/40 pb-2">
+                                      <div className="min-w-0">
+                                        <p className="text-ui-label font-semibold tracking-wide text-foreground/90">
+                                          {DOCUMENT_DRAFT_LABELS[sheet.kind]}
+                                        </p>
+                                        <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                                          {sheet.programNameEn}
+                                        </p>
+                                        {templateSourceProgramId === sheet.programId && (
+                                          <p className="mt-1 inline-flex items-center gap-1 text-[10px] text-orange-700">
+                                            <Star className="h-3 w-3 fill-current" />
+                                            模版文书
+                                          </p>
+                                        )}
+                                      </div>
+                                      <PenLine className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70 opacity-0 transition-opacity group-hover:opacity-100" />
+                                    </div>
+                                    <div className="min-h-0 flex-1 overflow-hidden pt-3">
+                                      <p className="line-clamp-[14] whitespace-pre-wrap break-words font-serif text-ui-label leading-[1.65] text-foreground/85">
+                                        {sheet.preview}
+                                      </p>
+                                    </div>
+                                    <p className="mt-auto border-t border-border/40 pt-2 text-[10px] tabular-nums text-muted-foreground">
+                                      更新 {formatDraftUpdated(sheet.updatedAt)}
+                                    </p>
+                                  </div>
+                                </article>
+                              </Link>
+                            ))}
+                          </div>
+                          {selectedProgramDraftSheetsNeedExpand && !showAllProgramDrafts && (
+                            <div className="flex justify-center pt-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="text-xs"
+                                onClick={() => setShowAllProgramDrafts(true)}
+                              >
+                                查看全部文书
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </section>
                   </div>
                 </section>
               )}
@@ -1929,94 +2240,13 @@ export default function WorkspacePage() {
                 </div>
               )}
 
-              {selectedSchool && !selectedProgramPair && (
-                <div className="mb-6">
-                  <div className="mb-3 flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-muted-foreground" aria-hidden />
-                    <h2 className="text-sm font-medium text-foreground">已保存文书</h2>
-                  </div>
-                  {schoolDraftSheets.length === 0 ? (
-                    <p className="rounded-lg border border-dashed border-border/80 bg-surface-muted px-4 py-6 text-center text-sm text-muted-foreground">
-                      暂无已保存内容。在下方项目中点击笔形图标起草后，会以预览卡片显示在这里。
-                    </p>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-8 xl:grid-cols-3">
-                        {visibleSchoolDraftSheets.map((sheet) => (
-                          <Link
-                            key={`${sheet.programId}-${sheet.kind}`}
-                            href={`/workspace/write/${sheet.programId}`}
-                            className={cn(
-                              "group mx-auto block w-full max-w-[280px] outline-none sm:mx-0 sm:max-w-none",
-                              "focus-visible:rounded-2xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            )}
-                          >
-                            <article
-                              className={cn(
-                                "relative flex aspect-[210/297] w-full flex-col overflow-hidden rounded-2xl",
-                                "border border-border/50 bg-card/80 text-card-foreground backdrop-blur-[2px]",
-                                "shadow-[0_1px_2px_rgba(15,23,42,0.04)]",
-                                "transition-[transform,box-shadow,border-color] duration-200 ease-out",
-                                "group-hover:-translate-y-0.5 group-hover:border-border/70",
-                                "group-hover:shadow-[0_4px_24px_-4px_rgba(15,23,42,0.07),0_2px_8px_-2px_rgba(15,23,42,0.04)]",
-                                "dark:shadow-[0_1px_2px_rgba(0,0,0,0.25)]",
-                                "dark:group-hover:shadow-[0_8px_28px_-6px_rgba(0,0,0,0.35)]"
-                              )}
-                            >
-                              <div
-                                aria-hidden
-                                className="pointer-events-none absolute inset-x-[7%] top-[8%] h-px bg-border/50"
-                              />
-                              <div className="flex min-h-0 flex-1 flex-col px-[9%] pb-[8%] pt-[12%]">
-                                <div className="flex items-start justify-between gap-2 border-b border-border/40 pb-2">
-                                  <div className="min-w-0">
-                                    <p className="text-ui-label font-semibold tracking-wide text-foreground/90">
-                                      {DOCUMENT_DRAFT_LABELS[sheet.kind]}
-                                    </p>
-                                    <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
-                                      {sheet.programNameEn}
-                                    </p>
-                                  </div>
-                                  <PenLine className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70 opacity-0 transition-opacity group-hover:opacity-100" />
-                                </div>
-                                <div className="min-h-0 flex-1 overflow-hidden pt-3">
-                                  <p className="line-clamp-[14] whitespace-pre-wrap break-words font-serif text-ui-label leading-[1.65] text-foreground/85">
-                                    {sheet.preview}
-                                  </p>
-                                </div>
-                                <p className="mt-auto border-t border-border/40 pt-2 text-[10px] tabular-nums text-muted-foreground">
-                                  更新 {formatDraftUpdated(sheet.updatedAt)}
-                                </p>
-                              </div>
-                            </article>
-                          </Link>
-                        ))}
-                      </div>
-                      {schoolDraftSheetsNeedExpand && !showAllSchoolDrafts && (
-                        <div className="flex justify-center pt-1">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="text-xs"
-                            onClick={() => setShowAllSchoolDrafts(true)}
-                          >
-                            查看全部文书
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
               {!selectedProgramPair && activeView === "dashboard" &&
               (addedPrograms.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border p-12 text-center">
                   <GraduationCap className="mx-auto mb-4 h-14 w-14 text-muted-foreground" />
                   <h2 className="mb-2 text-lg font-semibold text-foreground">还没有添加申请项目</h2>
                   <p className="mb-6 text-sm text-muted-foreground">
-                从匹配结果中加入项目后，会出现在左侧栏与列表中；每个项目可点击笔形图标按模板起草文书。
+                从匹配结果中加入项目后，会出现在左侧栏与列表中；每个项目可点击笔形图标按模版起草文书。
               </p>
                   <Link href="/match">
                     <Button>
@@ -2238,6 +2468,262 @@ export default function WorkspacePage() {
               复制链接
             </span>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={addProgramDialogOpen} onOpenChange={setAddProgramDialogOpen}>
+        <DialogContent className="sm:max-w-[640px]">
+          <DialogHeader>
+            <DialogTitle>添加项目</DialogTitle>
+            <DialogDescription>搜索并加入工作台项目列表</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              value={addProgramQuery}
+              onChange={(e) => setAddProgramQuery(e.target.value)}
+              placeholder="搜索学校或项目名称"
+            />
+            <ScrollArea className="h-[min(52vh,420px)] rounded-md border border-border/70">
+              <div className="p-2">
+                {filteredAddablePrograms.length === 0 ? (
+                  <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+                    {addablePrograms.length === 0 ? "所有项目都已在工作台中" : "没有匹配到可添加项目"}
+                  </p>
+                ) : (
+                  <div className="space-y-1">
+                    {sortedFilteredAddablePrograms.map(({ program, school }) => (
+                      <div key={program.id} className="rounded-md border border-transparent hover:border-border/70">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedAddProgramId((curr) => (curr === program.id ? null : program.id))
+                          }
+                          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-muted/50"
+                        >
+                          <SchoolLogoMark school={school} size="sidebar" rounded="md" />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="truncate text-sm font-medium text-foreground">{program.nameEn}</p>
+                              {recommendedProgramIds.has(program.id) && (
+                                <Badge
+                                  variant="outline"
+                                  className="h-5 border-orange-200 bg-orange-50 px-1.5 text-[10px] text-orange-700"
+                                >
+                                  推荐
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {school.name} · {program.degree}
+                            </p>
+                          </div>
+                          <ChevronRight
+                            className={cn(
+                              "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+                              expandedAddProgramId === program.id && "rotate-90"
+                            )}
+                          />
+                        </button>
+                        {expandedAddProgramId === program.id && (
+                          <div className="space-y-2 border-t border-border/60 px-3 py-2">
+                            <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                              <p>
+                                学校：<span className="text-foreground">{school.nameEn}</span>
+                              </p>
+                              <p>
+                                类型：<span className="text-foreground">{program.degree}</span>
+                              </p>
+                              <p>
+                                学制：<span className="text-foreground">{program.duration}</span>
+                              </p>
+                              <p>
+                                截止：<span className="text-foreground">{program.deadline || "待更新"}</span>
+                              </p>
+                              <p className="col-span-2">
+                                学费：<span className="text-foreground">{program.tuition || "待更新"}</span>
+                              </p>
+                              <p className="col-span-2">
+                                院系：<span className="text-foreground">{program.department || "待更新"}</span>
+                              </p>
+                            </div>
+                            {program.requirements?.length ? (
+                              <p className="line-clamp-2 text-xs text-muted-foreground">
+                                要求：{program.requirements.join("；")}
+                              </p>
+                            ) : null}
+                            {addProgramQuery.trim() &&
+                            intendedMajorTokens.length > 0 &&
+                            overlapCount(
+                              tokenizeSimilarityText(`${program.name} ${program.nameEn} ${program.department}`),
+                              intendedMajorTokens
+                            ) === 0 ? (
+                              <p className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-xs text-orange-700">
+                                跨专业风险提示：该项目与当前意向专业匹配度较低，请确认先修课、背景契合度与申请成功率。
+                              </p>
+                            ) : null}
+                            <div className="flex justify-end">
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => {
+                                  const isCrossMajorByIntent =
+                                    intendedMajorTokens.length > 0 &&
+                                    overlapCount(
+                                      tokenizeSimilarityText(
+                                        `${program.name} ${program.nameEn} ${program.department}`
+                                      ),
+                                      intendedMajorTokens
+                                    ) === 0;
+                                  if (addProgramQuery.trim() && isCrossMajorByIntent) {
+                                    const ok = window.confirm(
+                                      "检测到该项目与当前意向专业匹配度较低，可能存在跨专业申请风险。是否继续添加？"
+                                    );
+                                    if (!ok) return;
+                                  }
+                                  addProgramToWorkspace(program);
+                                }}
+                              >
+                                添加到工作台
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setAddProgramDialogOpen(false);
+                setAddProgramQuery("");
+                setExpandedAddProgramId(null);
+              }}
+            >
+              关闭
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={writeChoiceOpen} onOpenChange={setWriteChoiceOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{writeChoiceMode === "existing" ? "检测到已有文书草稿" : "选择创建方式"}</DialogTitle>
+            <DialogDescription>
+              {writeChoiceMode === "existing"
+                ? "该项目之前已生成过文书。请选择打开历史版本，或清空并创建新的草稿。"
+                : templateSourceProgramId
+                  ? "可基于已有模版文书快速创建，也可直接新建空白文书。"
+                  : "当前没有模版文书，建议直接新建。"}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            {writeChoiceMode === "existing" ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const pid = pendingWriteProgramId;
+                    setWriteChoiceOpen(false);
+                    if (!pid) return;
+                    router.push(`/workspace/write/${pid}`);
+                  }}
+                >
+                  打开之前的文书
+                </Button>
+                <Button
+                  onClick={() => {
+                    const pid = pendingWriteProgramId;
+                    setWriteChoiceOpen(false);
+                    if (!pid) return;
+                    clearProgramDrafts(pid);
+                    router.push(`/workspace/write/${pid}`);
+                  }}
+                >
+                  创建新的
+                </Button>
+              </>
+            ) : (
+              <>
+                {templateSourceProgramId ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const pid = pendingWriteProgramId;
+                      setWriteChoiceOpen(false);
+                      if (!pid) return;
+                      router.push(`/workspace/write/${pid}`);
+                    }}
+                  >
+                    基于模版文书创建
+                  </Button>
+                ) : null}
+                <Button
+                  onClick={() => {
+                    const pid = pendingWriteProgramId;
+                    setWriteChoiceOpen(false);
+                    if (!pid) return;
+                    router.push(`/workspace/write/${pid}/questions/1`);
+                  }}
+                >
+                  新建空白文书
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={removeConfirmOpen} onOpenChange={setRemoveConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{pendingRemoveSchoolId ? "确认移除院校？" : "确认移除项目？"}</DialogTitle>
+            <DialogDescription>
+              {pendingRemoveSchoolId
+                ? pendingRemoveSchoolLabel
+                  ? `将从工作台移除「${pendingRemoveSchoolLabel}」及其全部项目。文书草稿会保留在本地。`
+                  : "将从工作台移除该院校及其全部项目。文书草稿会保留在本地。"
+                : pendingRemoveProgramLabel
+                  ? `将从工作台移除「${pendingRemoveProgramLabel}」。文书草稿会保留在本地。`
+                  : "将从工作台移除该项目。文书草稿会保留在本地。"}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setRemoveConfirmOpen(false);
+                setPendingRemoveProgramId(null);
+                setPendingRemoveSchoolId(null);
+              }}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                if (pendingRemoveSchoolId) {
+                  removeSchool(pendingRemoveSchoolId);
+                  setLiveMessage("已移除院校");
+                } else if (pendingRemoveProgramId) {
+                  removeProgram(pendingRemoveProgramId);
+                  setLiveMessage("已移除项目");
+                }
+                setRemoveConfirmOpen(false);
+                setPendingRemoveProgramId(null);
+                setPendingRemoveSchoolId(null);
+              }}
+            >
+              {pendingRemoveSchoolId ? "确认移除院校" : "确认移除"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
