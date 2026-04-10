@@ -186,6 +186,9 @@ function formatDeadlineDateShort(ts: number) {
 
 const DASHBOARD_UPCOMING_DEADLINE_COUNT = 5;
 
+/** 无可用真实截止日时，距「今天 0 点」的天数偏移（演示占位） */
+const PRESET_DEADLINE_DAY_OFFSETS = [12, 26, 40, 54, 68] as const;
+
 const TIER_ORDER: School["category"][] = ["reach", "match", "safety"];
 
 const TIER_SECTION_LABEL: Record<School["category"], string> = {
@@ -718,19 +721,35 @@ export default function WorkspacePage() {
     });
   }, [displayPrograms]);
 
-  const upcomingDeadlinePrograms = useMemo(() => {
+  const upcomingDeadlineRows = useMemo(() => {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const items: { program: Program; school: School; ts: number; raw: string }[] = [];
+    const dayMs = 24 * 60 * 60 * 1000;
+    const items: { program: Program; school: School; ts: number; presetDeadline: boolean }[] = [];
     for (const { program, school } of displayPrograms) {
       const raw = program.deadline?.trim() ?? "";
       const ts = deadlineTimestampForSort(raw);
       if (ts === null) continue;
       if (ts < todayStart) continue;
-      items.push({ program, school, ts, raw });
+      items.push({ program, school, ts, presetDeadline: false });
     }
     items.sort((a, b) => a.ts - b.ts);
-    return items.slice(0, DASHBOARD_UPCOMING_DEADLINE_COUNT);
+    const sliced = items.slice(0, DASHBOARD_UPCOMING_DEADLINE_COUNT);
+    if (sliced.length > 0) return sliced;
+
+    const n = Math.min(DASHBOARD_UPCOMING_DEADLINE_COUNT, displayPrograms.length);
+    const preset: { program: Program; school: School; ts: number; presetDeadline: boolean }[] = [];
+    for (let i = 0; i < n; i++) {
+      const { program, school } = displayPrograms[i];
+      const dayOffset = PRESET_DEADLINE_DAY_OFFSETS[i] ?? 12 + i * 14;
+      preset.push({
+        program,
+        school,
+        ts: todayStart + dayOffset * dayMs,
+        presetDeadline: true,
+      });
+    }
+    return preset;
   }, [displayPrograms]);
 
   const backgroundMaterialCount = questionnaireData.files.length;
@@ -1451,23 +1470,23 @@ export default function WorkspacePage() {
                   </div>
                   {addedPrograms.length > 0 ? (
                     <div
-                      className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start sm:justify-start sm:gap-5 md:gap-6"
+                      className="grid w-full grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_11.25rem_minmax(0,min(22rem,100%))] sm:items-stretch sm:gap-x-5 md:grid-cols-[minmax(0,1fr)_12rem_minmax(0,min(24rem,100%))] md:gap-x-6 lg:grid-cols-[minmax(0,1fr)_12rem_minmax(0,min(26rem,100%))]"
                       role="region"
                       aria-label="申请数据概览"
                     >
-                        <div className="flex w-full min-w-0 flex-col sm:max-w-[15.5rem] sm:shrink-0">
+                        <div className="relative z-0 flex h-full min-h-0 min-w-0 max-w-full flex-col">
                           {dashboardMapPins.length > 0 ? (
                             <div
-                              className="flex w-full flex-col overflow-hidden rounded-lg border border-border/60 bg-background/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:bg-background/60 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
+                              className="isolate flex h-full min-h-0 w-full max-w-full flex-col overflow-hidden rounded-lg border border-border/60 bg-background/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:bg-background/60 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
                               role="img"
                               aria-label={`院校分布，共 ${dashboardStats.schools} 所`}
                             >
-                              <div className="flex shrink-0 flex-col gap-1 border-b border-border/50 px-4 py-3">
-                                <div className="flex items-baseline justify-between gap-3">
-                                  <span className="ui-field-label font-medium tracking-wide text-foreground">
+                              <div className="flex shrink-0 flex-col gap-1 border-b border-border/50 px-4 py-2.5 sm:py-3">
+                                <div className="grid w-full grid-cols-[1fr_auto] items-baseline gap-x-3 gap-y-0">
+                                  <span className="min-w-0 truncate ui-field-label font-medium tracking-wide text-foreground">
                                     院校
                                   </span>
-                                  <p className="text-xl font-semibold tabular-nums tracking-tight text-foreground">
+                                  <p className="shrink-0 text-right text-xl font-semibold tabular-nums tracking-tight text-foreground">
                                     {dashboardStats.schools}
                                   </p>
                                 </div>
@@ -1483,12 +1502,12 @@ export default function WorkspacePage() {
                                   </a>
                                 </p>
                               </div>
-                              <div className="relative min-h-[7.5rem] w-full overflow-hidden sm:min-h-[8rem]">
+                              <div className="relative z-0 min-h-[7.5rem] w-full max-w-full flex-1 overflow-hidden [&_.leaflet-container]:max-w-full">
                                 <WorkspaceApplicationsMap
                                   compact
                                   pins={dashboardMapPins}
                                   onSelectSchool={(id) => selectSchool(id)}
-                                  className="absolute inset-0 h-full w-full max-w-none"
+                                  className="absolute inset-0 h-full w-full max-w-full"
                                 />
                               </div>
                             </div>
@@ -1496,11 +1515,11 @@ export default function WorkspacePage() {
                             <button
                               type="button"
                               onClick={() => jumpToApplicationList()}
-                              className="flex w-full flex-col justify-start rounded-lg border border-border/60 bg-background/80 px-4 py-3 text-left shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-colors hover:bg-background dark:bg-background/60 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
+                              className="flex h-full min-h-[7.5rem] w-full flex-col justify-center rounded-lg border border-border/60 bg-background/80 px-4 py-3 text-left shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-colors hover:bg-background dark:bg-background/60 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
                             >
-                              <div className="flex items-baseline justify-between gap-3">
-                                <span className="ui-field-label font-medium tracking-wide">院校</span>
-                                <p className="text-xl font-semibold tabular-nums tracking-tight text-foreground">
+                              <div className="grid w-full grid-cols-[1fr_auto] items-baseline gap-x-3">
+                                <span className="min-w-0 truncate ui-field-label font-medium tracking-wide">院校</span>
+                                <p className="shrink-0 text-right text-xl font-semibold tabular-nums tracking-tight text-foreground">
                                   {dashboardStats.schools}
                                 </p>
                               </div>
@@ -1508,93 +1527,98 @@ export default function WorkspacePage() {
                           )}
                         </div>
                         <div
-                          className="flex w-full shrink-0 flex-col gap-3 sm:w-[11.25rem] md:w-48"
+                          className="relative z-[1] flex h-full min-h-0 w-full min-w-0 max-w-full flex-col gap-2 md:gap-3"
                           aria-label="申请指标"
                         >
                           <button
                             type="button"
                             onClick={() => jumpToApplicationList()}
-                            className="flex flex-col justify-start rounded-lg border border-border/60 bg-background/80 px-4 py-3 text-left shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-colors hover:bg-background dark:bg-background/60 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
+                            className="flex min-h-0 w-full min-w-0 flex-1 flex-col justify-center rounded-lg border border-border/60 bg-background/80 px-4 py-2.5 text-left shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-colors hover:bg-background dark:bg-background/60 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)] md:py-3"
                           >
-                            <div className="flex w-full items-baseline justify-between gap-3">
-                              <span className="ui-field-label font-medium tracking-wide">项目</span>
-                              <p className="text-xl font-semibold tabular-nums tracking-tight text-foreground">
+                            <div className="grid w-full min-w-0 grid-cols-[1fr_auto] items-baseline gap-x-3">
+                              <span className="min-w-0 truncate ui-field-label font-medium tracking-wide">项目</span>
+                              <p className="shrink-0 text-right text-xl font-semibold tabular-nums tracking-tight text-foreground">
                                 {dashboardStats.programs}
                               </p>
                             </div>
                           </button>
-                          <div className="flex flex-col justify-start rounded-lg border border-border/60 bg-background/80 px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:bg-background/60 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
-                            <div className="flex w-full items-baseline justify-between gap-3">
-                              <span className="ui-field-label font-medium tracking-wide">待申请</span>
-                              <p className="text-xl font-semibold tabular-nums tracking-tight text-foreground">
+                          <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col justify-center rounded-lg border border-border/60 bg-background/80 px-4 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:bg-background/60 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)] md:py-3">
+                            <div className="grid w-full min-w-0 grid-cols-[1fr_auto] items-baseline gap-x-3">
+                              <span className="min-w-0 truncate ui-field-label font-medium tracking-wide">待申请</span>
+                              <p className="shrink-0 text-right text-xl font-semibold tabular-nums tracking-tight text-foreground">
                                 {dashboardStats.todo}
                               </p>
                             </div>
                           </div>
-                          <div className="flex flex-col justify-start rounded-lg border border-border/60 bg-background/80 px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:bg-background/60 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
-                            <div className="flex w-full items-baseline justify-between gap-3">
-                              <span className="ui-field-label font-medium tracking-wide">进行中</span>
-                              <p className="text-xl font-semibold tabular-nums tracking-tight text-foreground">
+                          <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col justify-center rounded-lg border border-border/60 bg-background/80 px-4 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:bg-background/60 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)] md:py-3">
+                            <div className="grid w-full min-w-0 grid-cols-[1fr_auto] items-baseline gap-x-3">
+                              <span className="min-w-0 truncate ui-field-label font-medium tracking-wide">进行中</span>
+                              <p className="shrink-0 text-right text-xl font-semibold tabular-nums tracking-tight text-foreground">
                                 {dashboardStats.active}
                               </p>
                             </div>
                           </div>
                         </div>
                         <div
-                          className="flex w-full min-w-0 flex-col gap-2 rounded-lg border border-border/60 bg-background/80 px-3 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:bg-background/60 sm:flex-1 sm:self-stretch md:px-4 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
+                          className="relative z-[1] flex h-full min-h-0 w-full min-w-0 max-w-full flex-col gap-2 rounded-lg border border-border/60 bg-background/80 px-4 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:bg-background/60 md:py-3 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
                           aria-label="即将截止的申请"
                         >
-                          <div className="flex items-center gap-2 border-b border-border/40 pb-2">
-                            <CalendarClock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                            <span className="ui-field-label font-medium tracking-wide text-foreground">
+                          <div className="grid shrink-0 grid-cols-[auto_1fr_auto] items-center gap-x-2.5 border-b border-border/40 pb-2">
+                            <CalendarClock className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                            <span className="min-w-0 truncate text-xs font-medium tracking-wide text-foreground">
                               即将截止
                             </span>
-                            <span className="ml-auto text-[10px] tabular-nums text-muted-foreground">
+                            <span className="shrink-0 text-right text-xs tabular-nums leading-snug text-muted-foreground">
                               最近 {DASHBOARD_UPCOMING_DEADLINE_COUNT} 条
                             </span>
                           </div>
-                          {upcomingDeadlinePrograms.length === 0 ? (
-                            <p className="text-xs leading-relaxed text-muted-foreground">
-                              当前列表中暂无未过期的固定截止日期（滚动录取或未标注日期的项目不会出现在此）。
+                          {upcomingDeadlineRows.length === 0 ? (
+                            <p className="shrink-0 text-xs leading-relaxed text-muted-foreground">
+                              当前筛选下没有项目，加入申请后将在此显示即将截止与示例占位。
                             </p>
                           ) : (
-                            <ul className="space-y-0.5">
-                              {upcomingDeadlinePrograms.map(({ program, school, ts }) => {
+                            <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]">
+                            <ul className="space-y-1 pr-0.5">
+                              {upcomingDeadlineRows.map(({ program, school, ts, presetDeadline }) => {
                                 const urgent =
                                   ts - Date.now() < 14 * 24 * 60 * 60 * 1000;
                                 return (
-                                  <li key={program.id}>
+                                  <li key={`${program.id}${presetDeadline ? "-preset" : ""}`}>
                                     <button
                                       type="button"
                                       onClick={() => openProgramDetail(program)}
-                                      className="flex w-full min-w-0 flex-col gap-0.5 rounded-md px-2 py-2 text-left transition-colors hover:bg-muted/80"
+                                      className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 rounded-md px-2 py-1.5 text-left text-xs leading-snug transition-colors hover:bg-muted/80"
                                     >
-                                      <span className="truncate text-xs font-medium text-foreground">
-                                        {primaryProgramLabel(program)}
-                                      </span>
-                                      <span className="truncate text-[11px] text-muted-foreground">
-                                        {school.nameEn}
+                                      <span className="min-w-0 truncate text-left">
+                                        <span className="font-medium text-foreground">
+                                          {primaryProgramLabel(program)}
+                                        </span>
+                                        <span className="text-muted-foreground"> · {school.nameEn}</span>
                                       </span>
                                       <span
                                         className={cn(
-                                          "text-[11px] tabular-nums",
+                                          "shrink-0 text-right tabular-nums whitespace-nowrap leading-snug",
                                           urgent
                                             ? "font-medium text-amber-800 dark:text-amber-200"
                                             : "text-muted-foreground"
                                         )}
                                       >
                                         截止 {formatDeadlineDateShort(ts)}
+                                        {presetDeadline ? (
+                                          <span className="font-normal text-muted-foreground"> · 示例</span>
+                                        ) : null}
                                       </span>
                                     </button>
                                   </li>
                                 );
                               })}
                             </ul>
+                            </div>
                           )}
                           <button
                             type="button"
                             onClick={() => jumpToApplicationList()}
-                            className="mt-1 w-full rounded-md px-2 py-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                            className="mt-auto shrink-0 w-full rounded-md px-2 py-1.5 text-right text-xs leading-snug text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
                           >
                             查看申请列表
                           </button>

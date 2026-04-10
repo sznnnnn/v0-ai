@@ -19,6 +19,38 @@ export type WorkspaceMapPin = {
   logo?: string;
 };
 
+/** Grid / dynamic 加载后容器宽常仍为 0，Leaflet 会按错误尺寸排版并盖住邻列；需随尺寸变化 invalidate。 */
+function MapInvalidateSize() {
+  const map = useMap();
+
+  useEffect(() => {
+    let cancelled = false;
+    let n = 0;
+    const run = () => {
+      if (cancelled) return;
+      map.invalidateSize({ pan: false });
+      n += 1;
+      if (n < 4) requestAnimationFrame(run);
+    };
+    requestAnimationFrame(run);
+    return () => {
+      cancelled = true;
+    };
+  }, [map]);
+
+  useEffect(() => {
+    const parent = map.getContainer().parentElement;
+    if (!parent) return;
+    const ro = new ResizeObserver(() => {
+      map.invalidateSize({ pan: false });
+    });
+    ro.observe(parent);
+    return () => ro.disconnect();
+  }, [map]);
+
+  return null;
+}
+
 function FitBounds({ pins, compact }: { pins: WorkspaceMapPin[]; compact?: boolean }) {
   const map = useMap();
   const sig = pins.map((p) => `${p.schoolId}:${p.lat}:${p.lng}`).join("|");
@@ -26,6 +58,7 @@ function FitBounds({ pins, compact }: { pins: WorkspaceMapPin[]; compact?: boole
   useEffect(() => {
     const positions = pins.map((p) => [p.lat, p.lng] as [number, number]);
     if (positions.length === 0) return;
+    map.invalidateSize({ pan: false });
     const pad = compact ? [10, 10] as [number, number] : ([40, 40] as [number, number]);
     const maxZ = compact ? 5 : 8;
     if (positions.length === 1) {
@@ -73,7 +106,7 @@ export function WorkspaceApplicationsMapImpl({
   return (
     <div
       className={cn(
-        compact ? "h-full w-full" : "w-full max-w-[340px] space-y-2",
+        compact ? "h-full w-full max-w-full overflow-hidden" : "w-full max-w-[340px] space-y-2",
         className
       )}
     >
@@ -92,11 +125,14 @@ export function WorkspaceApplicationsMapImpl({
           attributionControl={!compact}
           className={cn(
             "isolate z-0 h-full w-full",
+            compact &&
+              "[&_.leaflet-container]:!box-border [&_.leaflet-container]:h-full [&_.leaflet-container]:max-w-full [&_.leaflet-container]:w-full",
             !compact &&
               "[&_.leaflet-control-attribution]:max-w-[min(100%,160px)] [&_.leaflet-control-attribution]:whitespace-normal [&_.leaflet-control-attribution]:text-[9px] [&_.leaflet-control-attribution]:leading-snug"
           )}
           scrollWheelZoom={!compact}
         >
+          <MapInvalidateSize />
           <TileLayer
             attribution={
               compact
