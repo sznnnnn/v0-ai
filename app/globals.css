@@ -4,6 +4,32 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /*
+   * 全站视觉规范（浅色默认；与 Tailwind semantic 对齐）
+   * —— 色板：--background / --foreground / --muted / --border / --primary
+   * —— 画布：页面白底用 bg-background；侧栏用 bg-sidebar（#FBFBFA）
+   * —— 次级区块：bg-surface-muted（≈ zinc-50）；悬停加深：bg-surface-muted-hover
+   * —— 列表行（Notion 风）：hover:bg-interactive-hover；选中：bg-interactive-active
+   * —— 字号阶梯：text-xs … text-2xl 对应 12–24px（--type-*）
+   * —— 11px 标签：text-ui-label；侧栏分区标题：.ui-section-heading；表单项标签：.ui-field-label
+   * —— 深色卡片字阶：.type-spec-title … .type-spec-caption-soft
+   */
+  --type-2xl: 1.5rem;
+  --type-xl: 1.25rem;
+  --type-lg: 1.125rem;
+  --type-base: 1rem;
+  --type-sm: 0.875rem;
+  --type-xs: 0.75rem;
+  --type-ui-label: 0.6875rem;
+
+  --type-spec-muted: var(--muted-foreground);
+
+  --surface-canvas: #ffffff;
+  --surface-muted: #fafafa;
+  --surface-muted-hover: #f4f4f5;
+  --interactive-hover: rgba(55, 53, 47, 0.08);
+  --interactive-active: rgba(55, 53, 47, 0.12);
+
   --background: #ffffff;
   --foreground: #37352f;
   --card: #ffffff;
@@ -55,9 +81,19 @@
   --success-foreground: oklch(0.98 0 0);
   --warning: oklch(0.65 0.12 80);
   --warning-foreground: oklch(0.2 0 0);
+  --chip-info-bg: #e8f7ff;
+  --chip-info-text: #3491fa;
+  --chip-accent-bg: #f5e8ff;
+  --chip-accent-text: #722ed1;
 }
 
 .dark {
+  --surface-canvas: oklch(0.145 0 0);
+  --surface-muted: oklch(0.22 0 0);
+  --surface-muted-hover: oklch(0.28 0 0);
+  --interactive-hover: rgba(255, 255, 255, 0.08);
+  --interactive-active: rgba(255, 255, 255, 0.12);
+
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.145 0 0);
@@ -90,11 +126,25 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(0.269 0 0);
   --sidebar-ring: oklch(0.439 0 0);
+  --type-spec-muted: oklch(0.7 0 0);
 }
 
 @theme inline {
   --font-sans: 'Geist', 'Geist Fallback';
   --font-mono: 'Geist Mono', 'Geist Mono Fallback';
+  --text-2xl: var(--type-2xl);
+  --text-xl: var(--type-xl);
+  --text-lg: var(--type-lg);
+  --text-base: var(--type-base);
+  --text-sm: var(--type-sm);
+  --text-xs: var(--type-xs);
+  --text-ui-label: var(--type-ui-label);
+  --text-ui-label--line-height: 1rem;
+  --color-surface-canvas: var(--surface-canvas);
+  --color-surface-muted: var(--surface-muted);
+  --color-surface-muted-hover: var(--surface-muted-hover);
+  --color-interactive-hover: var(--interactive-hover);
+  --color-interactive-active: var(--interactive-active);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -131,14 +181,22 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-type-spec-muted: var(--type-spec-muted);
+  --color-chip-info-bg: var(--chip-info-bg);
+  --color-chip-info-text: var(--chip-info-text);
+  --color-chip-accent-bg: var(--chip-accent-bg);
+  --color-chip-accent-text: var(--chip-accent-text);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    font-size: 16px;
+  }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans text-base antialiased;
   }
 }
 
@@ -150,5 +208,72 @@
 
   .hide-scrollbar::-webkit-scrollbar {
     display: none;
+  }
+
+  /* 对齐设计稿：18 Bold 100% / 16 Bold 100% / 16 Regular 100% / 16 Regular 70% / 14 Regular 70% */
+  .type-spec-title {
+    font-size: var(--type-lg);
+    line-height: 1.35;
+    font-weight: 700;
+    color: var(--foreground);
+  }
+
+  .type-spec-lead {
+    font-size: var(--type-base);
+    line-height: 1.45;
+    font-weight: 700;
+    color: var(--foreground);
+  }
+
+  .type-spec-body {
+    font-size: var(--type-base);
+    line-height: 1.5;
+    font-weight: 400;
+    color: var(--foreground);
+  }
+
+  .type-spec-body-soft {
+    font-size: var(--type-base);
+    line-height: 1.5;
+    font-weight: 400;
+    color: var(--type-spec-muted);
+  }
+
+  .type-spec-caption-soft {
+    font-size: var(--type-sm);
+    line-height: 1.45;
+    font-weight: 400;
+    color: var(--type-spec-muted);
+  }
+
+  .ui-page-shell {
+    @apply min-h-screen bg-gradient-to-b from-background via-background to-muted/20;
+  }
+
+  .ui-section-heading {
+    font-size: var(--type-ui-label);
+    line-height: 1rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    color: color-mix(in oklch, var(--foreground) 55%, transparent);
+  }
+
+  .ui-field-label {
+    font-size: var(--type-ui-label);
+    line-height: 1rem;
+    letter-spacing: 0.02em;
+    color: var(--muted-foreground);
+  }
+
+  .ui-card {
+    @apply rounded-xl border border-border/80 bg-background;
+  }
+
+  .ui-card-inset {
+    @apply rounded-lg border border-border/70 bg-surface-muted;
+  }
+
+  .ui-card-inset-soft {
+    @apply rounded-lg border border-border/70 bg-surface-muted/50;
   }
 }

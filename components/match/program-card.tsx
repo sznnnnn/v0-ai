@@ -95,7 +95,7 @@ export function ProgramCard({
                   </span>
                 )}
                 {showSchoolInHeader && (
-                  <span className="truncate text-[11px] font-medium text-muted-foreground">
+                  <span className="truncate text-ui-label font-medium text-muted-foreground">
                     {school.nameEn}
                   </span>
                 )}
@@ -103,7 +103,7 @@ export function ProgramCard({
               <h3 className={cn("text-[15px] leading-snug tracking-tight text-foreground", isAdded ? "font-semibold" : "font-medium")}>
                 {program.nameEn}
               </h3>
-              <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{program.department}</p>
+              <p className="mt-0.5 truncate text-ui-label text-muted-foreground">{program.department}</p>
             </div>
             <div className="flex shrink-0 flex-wrap items-start justify-end gap-1.5">
               {showSchoolInHeader && (
@@ -123,9 +123,8 @@ export function ProgramCard({
                     <TooltipTrigger asChild>
                       <Button
                         type="button"
-                        variant="default"
                         size="icon"
-                        className="h-8 w-8 shrink-0 rounded-md"
+                        className="h-8 w-8 shrink-0 rounded-md border border-black bg-black text-white hover:bg-black/90"
                         onClick={(e) => {
                           e.stopPropagation();
                           if (!confirm("确认从工作台移除该项目吗？")) {
@@ -165,7 +164,7 @@ export function ProgramCard({
 
           <div
             className={cn(
-              "mt-4 grid min-w-0 grid-cols-2 divide-x overflow-hidden rounded-lg border text-[11px] sm:grid-cols-3",
+              "mt-4 grid min-w-0 grid-cols-2 divide-x overflow-hidden rounded-lg border text-ui-label sm:grid-cols-3",
               isAdded
                 ? "divide-border/80 border-foreground/25 bg-background"
                 : "divide-border/80 border-border/80 bg-background/60"

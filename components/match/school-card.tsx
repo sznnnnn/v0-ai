@@ -63,7 +63,7 @@ export function SchoolCard({
               <Badge
                 variant="outline"
                 className={cn(
-                  "h-6 shrink-0 border px-2 py-0 text-[11px] font-normal leading-none",
+                  "h-6 shrink-0 border px-2 py-0 text-ui-label font-normal leading-none",
                   inv
                     ? "border-foreground/30 bg-muted/20 text-foreground/90"
                     : "border-border/80 text-muted-foreground"

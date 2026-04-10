@@ -24,7 +24,7 @@ export function SchoolNotionCover({ school, className }: SchoolNotionCoverProps)
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-5">
           <SchoolLogoMark school={school} size="xl" rounded="xl" />
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">当前院校</p>
+            <p className="text-ui-label uppercase tracking-wide text-muted-foreground">当前院校</p>
             <h2 className="mt-1 text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-2xl">
               {school.nameEn}
             </h2>

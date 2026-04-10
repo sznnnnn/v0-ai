@@ -266,7 +266,7 @@ export default function MatchPage() {
                     <div className="flex items-center gap-2">
                       <span
                         className={cn(
-                          "inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-medium",
+                          "inline-flex h-5 w-5 items-center justify-center rounded-full text-ui-label font-medium",
                           isActive
                             ? "bg-foreground text-background"
                             : isDone
@@ -437,28 +437,30 @@ export default function MatchPage() {
 
           <div className="min-h-[min(70vh,520px)] pr-1">
             <section className="overflow-hidden rounded-xl border border-border/80 bg-card/95">
-              <div className="flex items-center gap-3 border-b border-border px-6 py-4 sm:px-8 sm:py-5">
-                <h2 className="text-lg font-semibold text-foreground">匹配项目</h2>
-                <span className="rounded-md bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
-                  {filteredPrograms.length}
-                </span>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-6 py-4 sm:px-8 sm:py-5">
+                <div className="flex min-w-0 flex-wrap items-center gap-3">
+                  <h2 className="text-lg font-semibold text-foreground">匹配项目</h2>
+                  <span className="rounded-md bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
+                    {filteredPrograms.length}
+                  </span>
+                  {selectedSchool && (
+                    <span className="hidden text-xs text-muted-foreground sm:inline">
+                      当前院校：{selectedSchool.nameEn}
+                    </span>
+                  )}
+                </div>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-7 px-2 text-xs"
+                  className="h-7 shrink-0 rounded-md border-chip-info-text/35 bg-chip-info-bg px-2.5 text-xs font-medium text-chip-info-text shadow-none hover:bg-chip-info-bg/85 hover:text-chip-info-text disabled:border-border/60 disabled:bg-muted/40 disabled:text-muted-foreground"
                   disabled={filteredPrograms.length === 0}
                   onClick={handleToggleVisiblePrograms}
                 >
                   {filteredPrograms.every((program) => addedPrograms.includes(program.id))
                     ? "取消全选"
-                    : "全选当前列表"}
+                    : "全部勾选"}
                 </Button>
-                {selectedSchool && (
-                  <span className="hidden text-xs text-muted-foreground sm:inline">
-                    当前院校：{selectedSchool.nameEn}
-                  </span>
-                )}
               </div>
 
               {selectedSchool && (

@@ -214,11 +214,10 @@ export function SkillsForm({ data, onChange }: SkillsFormProps) {
                     key={skill}
                     variant="outline"
                     className={cn(
-                      "border-transparent bg-[#E8F7FF] px-2 py-0.5 text-[11px] font-normal text-[#3491FA] shadow-none",
+                      "border border-border/70 bg-muted/35 px-2 py-0.5 text-ui-label font-normal text-foreground/80 shadow-none",
                       "transition-colors",
-                      isAdded && "bg-[#E8FFEA] text-[#00B42A]",
-                      !isAdded &&
-                        "cursor-pointer hover:bg-[#FFF7E8] hover:text-[#FF7D00]"
+                      isAdded && "border-border/60 bg-muted text-foreground",
+                      !isAdded && "cursor-pointer hover:bg-muted/70 hover:text-foreground"
                     )}
                     onClick={() => !isAdded && addSuggestedSkill(skill, category as Skill["category"])}
                   >

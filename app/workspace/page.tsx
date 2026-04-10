@@ -83,7 +83,7 @@ const statusConfig = {
   },
   submitted: {
     label: "已提交",
-    color: "border-transparent bg-[#E8F7FF] text-[#3491FA]",
+    color: "border-transparent bg-chip-info-bg text-chip-info-text",
   },
   accepted: {
     label: "已录取",
@@ -96,7 +96,7 @@ const statusConfig = {
 };
 
 const notionTagPalette = [
-  "border-transparent bg-[#E8F7FF] text-[#3491FA]", // Blue
+  "border-transparent bg-chip-info-bg text-chip-info-text", // Blue
   "border-transparent bg-[#FFFCE8] text-[#F7BA1E]", // Yellow
   "border-transparent bg-[#FFF7E8] text-[#FF7D00]", // Orange
   "border-transparent bg-[#E8FFEA] text-[#00B42A]", // Green
@@ -583,7 +583,7 @@ export default function WorkspacePage() {
   const sidebarBody = (opts: { onPick?: () => void }) => (
     <>
       <div className="px-3 pb-4">
-        <p className="mb-2 px-2 text-[11px] font-medium tracking-wide text-muted-foreground/80">浏览</p>
+        <p className="ui-section-heading mb-2 px-2">浏览</p>
         <nav className="space-y-0.5" aria-label="浏览">
           <button
             type="button"
@@ -596,14 +596,14 @@ export default function WorkspacePage() {
             className={cn(
               "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
               selectedSchoolId == null && activeView === "dashboard"
-                ? "bg-[rgba(55,53,47,0.12)] text-foreground"
-                : "text-muted-foreground hover:bg-[rgba(55,53,47,0.08)] hover:text-foreground"
+                ? "bg-interactive-active text-foreground"
+                : "text-foreground/82 hover:bg-interactive-hover hover:text-foreground"
             )}
           >
-            <LayoutGrid className="h-4 w-4 shrink-0 opacity-70" />
+            <LayoutGrid className="h-4 w-4 shrink-0 text-foreground/70" />
             <span className="flex-1 truncate">仪表盘</span>
             {addedPrograms.length > 0 && (
-              <span className="text-xs text-muted-foreground">{addedPrograms.length}</span>
+              <span className="text-xs text-foreground/72 tabular-nums">{addedPrograms.length}</span>
             )}
           </button>
           <button
@@ -615,20 +615,22 @@ export default function WorkspacePage() {
             className={cn(
               "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
               activeView === "background"
-                ? "bg-[rgba(55,53,47,0.12)] text-foreground"
-                : "text-muted-foreground hover:bg-[rgba(55,53,47,0.08)] hover:text-foreground"
+                ? "bg-interactive-active text-foreground"
+                : "text-foreground/82 hover:bg-interactive-hover hover:text-foreground"
             )}
           >
-            <FileText className="h-4 w-4 shrink-0 opacity-70" />
+            <FileText className="h-4 w-4 shrink-0 text-foreground/70" />
             <span className="flex-1 truncate">我的背景</span>
           </button>
         </nav>
       </div>
 
       <div className="px-3 pb-4">
-        <p className="mb-2 px-2 text-[11px] font-medium tracking-wide text-muted-foreground/80">学校</p>
+        <p className="ui-section-heading mb-2 px-2">学校</p>
         {schoolsInWorkspace.length === 0 ? (
-          <p className="px-2 text-xs text-muted-foreground">请先在选校结果页勾选项目，列表会自动同步</p>
+          <p className="px-2 text-xs leading-relaxed text-foreground/68">
+            请先在选校结果页勾选项目，列表会自动同步
+          </p>
         ) : (
           <ScrollArea className="h-[min(40vh,280px)] pr-2">
             <div className="space-y-0.5">
@@ -647,13 +649,13 @@ export default function WorkspacePage() {
                       className={cn(
                         "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
                         active
-                          ? "bg-[rgba(55,53,47,0.12)] text-foreground"
-                          : "text-muted-foreground hover:bg-[rgba(55,53,47,0.08)] hover:text-foreground"
+                          ? "bg-interactive-active text-foreground"
+                          : "text-foreground/82 hover:bg-interactive-hover hover:text-foreground"
                       )}
                     >
                       <SchoolLogoMark school={school} size="sidebar" rounded="md" />
                       <span className="min-w-0 flex-1 truncate">{school.name}</span>
-                      <span className="text-xs text-muted-foreground">{count}</span>
+                      <span className="text-xs text-foreground/72 tabular-nums">{count}</span>
                     </button>
 
                     {active && schoolPrograms.length > 0 && (
@@ -666,10 +668,10 @@ export default function WorkspacePage() {
                               openProgramDetail(program);
                               opts.onPick?.();
                             }}
-                            className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                            className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs text-foreground/75 transition-colors hover:bg-muted/40 hover:text-foreground"
                             title={program.nameEn}
                           >
-                            <File className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                            <File className="h-3.5 w-3.5 shrink-0 text-foreground/65" />
                             <span className="min-w-0 flex-1 truncate">{program.nameEn}</span>
                           </button>
                         ))}
@@ -684,9 +686,9 @@ export default function WorkspacePage() {
       </div>
 
       <div className="px-3 pb-4">
-        <p className="mb-2 px-2 text-[11px] font-medium tracking-wide text-muted-foreground/80">我的文书</p>
+        <p className="ui-section-heading mb-2 px-2">我的文书</p>
         {draftSummaries.length === 0 ? (
-          <p className="px-2 text-xs leading-relaxed text-muted-foreground">
+          <p className="px-2 text-xs leading-relaxed text-foreground/68">
             在项目中点击笔形图标创建文书后，草稿会出现在这里。
           </p>
         ) : (
@@ -698,12 +700,12 @@ export default function WorkspacePage() {
                     <Link
                       href={`/workspace/write/${d.programId}`}
                       onClick={() => opts.onPick?.()}
-                      className="flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-muted-foreground transition-colors duration-150 ease-in-out hover:bg-[rgba(55,53,47,0.08)] hover:text-foreground"
+                      className="flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-foreground/82 transition-colors duration-150 ease-in-out hover:bg-interactive-hover hover:text-foreground"
                       aria-label={labelForDraftProgram(d.programId)}
                       title={labelForDraftProgram(d.programId)}
                     >
-                      <PenLine className="h-4 w-4 shrink-0 opacity-70" />
-                      <span className="min-w-0 flex-1 truncate text-xs leading-snug text-foreground/90">
+                      <PenLine className="h-4 w-4 shrink-0 text-foreground/70" />
+                      <span className="min-w-0 flex-1 truncate text-xs leading-snug text-foreground">
                         {abbrevLabelForDraftProgram(d.programId)}
                       </span>
                     </Link>
@@ -722,7 +724,7 @@ export default function WorkspacePage() {
   );
 
   const sidebarFooter = (opts: { onPick?: () => void }) => (
-    <div className="border-t border-border/60 bg-[#FBFBFA] px-3 py-3">
+    <div className="border-t border-border/60 bg-sidebar px-3 py-3">
       <div className="flex flex-col gap-1">
         <button
           type="button"
@@ -730,14 +732,14 @@ export default function WorkspacePage() {
             setUsageGuideOpen(true);
             opts.onPick?.();
           }}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors duration-150 ease-in-out hover:bg-[rgba(55,53,47,0.08)] hover:text-foreground"
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors duration-150 ease-in-out hover:bg-interactive-hover hover:text-foreground"
         >
           <BookOpen className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
           <span>使用说明</span>
         </button>
         <a
           href="mailto:?subject=EduMatch%20%E7%94%A8%E6%88%B7%E5%8F%8D%E9%A6%88"
-          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors duration-150 ease-in-out hover:bg-[rgba(55,53,47,0.08)] hover:text-foreground"
+          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors duration-150 ease-in-out hover:bg-interactive-hover hover:text-foreground"
           onClick={() => opts.onPick?.()}
         >
           <MessageSquare className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
@@ -748,7 +750,7 @@ export default function WorkspacePage() {
   );
 
   return (
-    <div className="flex min-h-dvh flex-col bg-white">
+    <div className="flex min-h-dvh flex-col bg-background">
       <GuestBanner />
       <p className="sr-only" role="status" aria-live="polite">
         {liveMessage}
@@ -756,7 +758,7 @@ export default function WorkspacePage() {
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Desktop sidebar — Notion-like */}
-        <aside className="hidden min-h-0 w-[260px] shrink-0 flex-col border-r border-border/80 bg-[#FBFBFA] md:flex">
+        <aside className="hidden min-h-0 w-[260px] shrink-0 flex-col border-r border-border/80 bg-sidebar md:flex">
           <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border/60 px-4">
             <Link href="/" className="flex min-w-0 items-center gap-2">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary">
@@ -788,7 +790,7 @@ export default function WorkspacePage() {
         </aside>
 
         {/* Main */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-white">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
           <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4 md:hidden">
             <Button
               variant="ghost"
@@ -847,7 +849,7 @@ export default function WorkspacePage() {
                   </nav>
 
                   <div className="space-y-4">
-                    <div className="rounded-xl border border-border/80 bg-white px-4 py-4 sm:px-5">
+                    <div className="ui-card px-4 py-4 sm:px-5">
                       <div className="flex items-start gap-3">
                         <SchoolLogoMark school={selectedProgramPair.school} size="row" rounded="md" />
                         <div className="min-w-0 flex-1">
@@ -889,7 +891,7 @@ export default function WorkspacePage() {
                       </div>
                     </div>
 
-                    <div className="grid gap-2 rounded-xl border border-border/80 bg-zinc-50 px-4 py-3 text-xs sm:grid-cols-2 lg:grid-cols-4 sm:px-5">
+                    <div className="grid gap-2 rounded-xl border border-border/80 bg-surface-muted px-4 py-3 text-xs sm:grid-cols-2 lg:grid-cols-4 sm:px-5">
                       <div className="rounded-md border border-border/70 bg-background px-3 py-2" aria-label="学制信息">
                         <p className="text-muted-foreground">学制</p>
                         <p className="mt-1 text-sm font-semibold text-foreground">{selectedProgramPair.program.duration}</p>
@@ -912,7 +914,7 @@ export default function WorkspacePage() {
 
                     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
                       <div className="space-y-3">
-                        <section id="section-facts" className="rounded-md border border-border/70 bg-zinc-50">
+                        <section id="section-facts" className="rounded-md border border-border/70 bg-surface-muted">
                           <div className="border-b border-border/70 px-3 py-2">
                             <p className="text-xs font-medium text-muted-foreground">项目信息</p>
                           </div>
@@ -1027,7 +1029,7 @@ export default function WorkspacePage() {
                                     key={idx}
                                     className={cn(
                                       "rounded-full px-2.5 py-1 text-xs",
-                                      "border-transparent bg-[#E8F7FF] text-[#3491FA]"
+                                      "border-transparent bg-chip-info-bg text-chip-info-text"
                                     )}
                                   >
                                     {item}
@@ -1047,7 +1049,7 @@ export default function WorkspacePage() {
                                   key={idx}
                                   className={cn(
                                     "rounded-full px-2.5 py-1 text-xs",
-                                    "border-transparent bg-[#E8F7FF] text-[#3491FA]"
+                                    "border-transparent bg-chip-info-bg text-chip-info-text"
                                   )}
                                 >
                                   {req}
@@ -1146,9 +1148,9 @@ export default function WorkspacePage() {
                         <button
                           type="button"
                           onClick={() => jumpToApplicationList()}
-                          className="rounded-lg border border-border/70 bg-zinc-50 px-4 py-3.5 text-left transition-colors hover:bg-zinc-100"
+                          className="rounded-lg border border-border/70 bg-surface-muted px-4 py-3.5 text-left transition-colors hover:bg-surface-muted-hover"
                         >
-                          <span className="text-[11px] font-medium tracking-wide text-muted-foreground">项目</span>
+                          <span className="ui-field-label font-medium tracking-wide">项目</span>
                           <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
                             {dashboardStats.programs}
                           </p>
@@ -1158,23 +1160,21 @@ export default function WorkspacePage() {
                           onClick={() => {
                             jumpToApplicationList();
                           }}
-                          className="rounded-lg border border-border/70 bg-zinc-50 px-4 py-3.5 text-left transition-colors hover:bg-zinc-100"
+                          className="rounded-lg border border-border/70 bg-surface-muted px-4 py-3.5 text-left transition-colors hover:bg-surface-muted-hover"
                         >
-                          <span className="text-[11px] font-medium tracking-wide text-muted-foreground">院校</span>
+                          <span className="ui-field-label font-medium tracking-wide">院校</span>
                           <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
                             {dashboardStats.schools}
                           </p>
                         </button>
-                        <div className="rounded-lg border border-border/70 bg-zinc-50 px-4 py-3.5">
-                          <span className="text-[11px] font-medium tracking-wide text-muted-foreground">待申请</span>
+                        <div className="rounded-lg border border-border/70 bg-surface-muted px-4 py-3.5">
+                          <span className="ui-field-label font-medium tracking-wide">待申请</span>
                           <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
                             {dashboardStats.todo}
                           </p>
                         </div>
-                        <div className="rounded-lg border border-border/70 bg-zinc-50 px-4 py-3.5">
-                          <span className="text-[11px] font-medium tracking-wide text-muted-foreground">
-                            进行中
-                          </span>
+                        <div className="rounded-lg border border-border/70 bg-surface-muted px-4 py-3.5">
+                          <span className="ui-field-label font-medium tracking-wide">进行中</span>
                           <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
                             {dashboardStats.active}
                           </p>
@@ -1194,7 +1194,7 @@ export default function WorkspacePage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          className="border-[#3491FA]/40 text-[#3491FA] hover:bg-[#E8F7FF]"
+                          className="border-chip-info-text/40 text-chip-info-text hover:bg-chip-info-bg"
                           onClick={cancelBackgroundEdit}
                         >
                           取消
@@ -1211,14 +1211,14 @@ export default function WorkspacePage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="border-[#3491FA]/40 text-[#3491FA] hover:bg-[#E8F7FF]"
+                        className="border-chip-info-text/40 text-chip-info-text hover:bg-chip-info-bg"
                         onClick={() => setIsBackgroundEditing(true)}
                       >
                         编辑
                       </Button>
                     )}
                   </div>
-                  <Card className="border-border/80 bg-white shadow-none">
+                  <Card className="border-border/80 bg-background shadow-none">
                     <CardHeader className="pb-1">
                       <CardTitle className="flex items-center gap-2 text-base">
                         <User className="h-4 w-4 text-muted-foreground" />
@@ -1228,7 +1228,7 @@ export default function WorkspacePage() {
                     <CardContent>
                       <div className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
                         <div className="space-y-1 border-b border-border/60 pb-2 sm:border-0 sm:pb-0">
-                          <p className="text-[11px] tracking-wide text-muted-foreground">称呼</p>
+                          <p className="ui-field-label tracking-wide">称呼</p>
                           {isBackgroundEditing ? (
                             <Input
                               value={backgroundDraft?.personalInfo.fullName || ""}
@@ -1240,7 +1240,7 @@ export default function WorkspacePage() {
                           )}
                         </div>
                         <div className="space-y-1 border-b border-border/60 pb-2 sm:border-0 sm:pb-0">
-                          <p className="text-[11px] tracking-wide text-muted-foreground">专业</p>
+                          <p className="ui-field-label tracking-wide">专业</p>
                           {isBackgroundEditing ? (
                             <Input
                               value={backgroundDraft?.personalInfo.intendedMajor || ""}
@@ -1252,7 +1252,7 @@ export default function WorkspacePage() {
                           )}
                         </div>
                         <div className="space-y-1 border-b border-border/60 pb-2 sm:border-0 sm:pb-0">
-                          <p className="text-[11px] tracking-wide text-muted-foreground">领域</p>
+                          <p className="ui-field-label tracking-wide">领域</p>
                           {isBackgroundEditing ? (
                             <Input
                               value={backgroundDraft?.personalInfo.intendedApplicationField || ""}
@@ -1264,7 +1264,7 @@ export default function WorkspacePage() {
                           )}
                         </div>
                         <div className="space-y-1 border-b border-border/60 pb-2 sm:border-0 sm:pb-0">
-                          <p className="text-[11px] tracking-wide text-muted-foreground">入学</p>
+                          <p className="ui-field-label tracking-wide">入学</p>
                           {isBackgroundEditing ? (
                             <Input
                               value={backgroundDraft?.personalInfo.targetSemester || ""}
@@ -1276,7 +1276,7 @@ export default function WorkspacePage() {
                           )}
                         </div>
                         <div className="space-y-1 sm:col-span-2">
-                          <p className="text-[11px] tracking-wide text-muted-foreground">预算</p>
+                          <p className="ui-field-label tracking-wide">预算</p>
                           {isBackgroundEditing ? (
                             <Input
                               value={backgroundDraft?.personalInfo.budgetEstimate || ""}
@@ -1291,7 +1291,7 @@ export default function WorkspacePage() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-border/80 bg-white shadow-none">
+                  <Card className="border-border/80 bg-background shadow-none">
                     <CardHeader className="pb-2">
                       <CardTitle className="flex items-center gap-2 text-base">
                         <Briefcase className="h-4 w-4 text-muted-foreground" />
@@ -1303,7 +1303,7 @@ export default function WorkspacePage() {
                         <p className="text-sm text-muted-foreground">未填</p>
                       ) : (
                         (isBackgroundEditing ? backgroundDraft?.workExperience : questionnaireData.workExperience)?.map((work, index) => (
-                          <article key={work.id} className="rounded-lg border border-border/70 bg-zinc-50/50 p-3.5">
+                          <article key={work.id} className="ui-card-inset-soft p-3.5">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               {isBackgroundEditing ? (
                                 <div className="grid w-full gap-2 sm:grid-cols-2">
@@ -1337,7 +1337,7 @@ export default function WorkspacePage() {
                                   <p className="text-sm font-semibold text-foreground">
                                     {(work.company || "未填公司")} · {(work.position || "未填岗位")}
                                   </p>
-                                  <span className="rounded-md border border-transparent bg-[#E8F7FF] px-2 py-0.5 text-[11px] text-[#3491FA]">
+                                  <span className="rounded-md border border-transparent bg-chip-info-bg px-2 py-0.5 text-ui-label text-chip-info-text">
                                     {work.startDate || "未知开始"} - {work.isCurrent ? "至今" : (work.endDate || "未知结束")}
                                   </span>
                                 </>
@@ -1366,7 +1366,7 @@ export default function WorkspacePage() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-border/80 bg-white shadow-none">
+                  <Card className="border-border/80 bg-background shadow-none">
                     <CardHeader className="pb-2">
                       <CardTitle className="flex items-center gap-2 text-base">
                         <FolderGit2 className="h-4 w-4 text-muted-foreground" />
@@ -1378,7 +1378,7 @@ export default function WorkspacePage() {
                         <p className="text-sm text-muted-foreground">未填</p>
                       ) : (
                         (isBackgroundEditing ? backgroundDraft?.projects : questionnaireData.projects)?.map((proj, index) => (
-                          <article key={proj.id} className="rounded-lg border border-border/70 bg-zinc-50/50 p-3.5">
+                          <article key={proj.id} className="ui-card-inset-soft p-3.5">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               {isBackgroundEditing ? (
                                 <div className="grid w-full gap-2 sm:grid-cols-2">
@@ -1412,7 +1412,7 @@ export default function WorkspacePage() {
                                   <p className="text-sm font-semibold text-foreground">
                                     {(proj.name || "未填项目")} · {(proj.role || "未填角色")}
                                   </p>
-                                  <span className="rounded-md border border-transparent bg-[#E8F7FF] px-2 py-0.5 text-[11px] text-[#3491FA]">
+                                  <span className="rounded-md border border-transparent bg-chip-info-bg px-2 py-0.5 text-ui-label text-chip-info-text">
                                     {proj.startDate || "未知开始"} - {(proj.endDate || "未知结束")}
                                   </span>
                                 </>
@@ -1454,19 +1454,19 @@ export default function WorkspacePage() {
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
                           <Badge
                             variant="outline"
-                            className={cn("text-[11px]", "border-transparent bg-[#E8F7FF] text-[#3491FA]")}
+                            className={cn("text-ui-label", "border-transparent bg-chip-info-bg text-chip-info-text")}
                           >
                             QS #{selectedSchool.ranking}
                           </Badge>
                           <Badge
                             variant="outline"
-                            className={cn("text-[11px]", "border-transparent bg-[#E8F7FF] text-[#3491FA]")}
+                            className={cn("text-ui-label", "border-transparent bg-chip-info-bg text-chip-info-text")}
                           >
                             {selectedSchool.city} · {selectedSchool.country}
                           </Badge>
                           <Badge
                             variant="outline"
-                            className={cn("text-[11px]", "border-transparent bg-[#F5E8FF] text-[#722ED1]")}
+                            className={cn("text-ui-label", "border-transparent bg-chip-accent-bg text-chip-accent-text")}
                           >
                             {displayPrograms.length} 个项目
                           </Badge>
@@ -1493,7 +1493,7 @@ export default function WorkspacePage() {
                     <h2 className="text-sm font-medium text-foreground">已保存文书</h2>
                   </div>
                   {schoolDraftSheets.length === 0 ? (
-                    <p className="rounded-lg border border-dashed border-border/80 bg-zinc-50 px-4 py-6 text-center text-sm text-muted-foreground">
+                    <p className="rounded-lg border border-dashed border-border/80 bg-surface-muted px-4 py-6 text-center text-sm text-muted-foreground">
                       暂无已保存内容。在下方项目中点击笔形图标起草后，会以预览卡片显示在这里。
                     </p>
                   ) : (
@@ -1527,7 +1527,7 @@ export default function WorkspacePage() {
                               <div className="flex min-h-0 flex-1 flex-col px-[9%] pb-[8%] pt-[12%]">
                                 <div className="flex items-start justify-between gap-2 border-b border-border/40 pb-2">
                                   <div className="min-w-0">
-                                    <p className="text-[11px] font-semibold tracking-wide text-foreground/90">
+                                    <p className="text-ui-label font-semibold tracking-wide text-foreground/90">
                                       {DOCUMENT_DRAFT_LABELS[sheet.kind]}
                                     </p>
                                     <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
@@ -1537,7 +1537,7 @@ export default function WorkspacePage() {
                                   <PenLine className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70 opacity-0 transition-opacity group-hover:opacity-100" />
                                 </div>
                                 <div className="min-h-0 flex-1 overflow-hidden pt-3">
-                                  <p className="line-clamp-[14] whitespace-pre-wrap break-words font-serif text-[11px] leading-[1.65] text-foreground/85">
+                                  <p className="line-clamp-[14] whitespace-pre-wrap break-words font-serif text-ui-label leading-[1.65] text-foreground/85">
                                     {sheet.preview}
                                   </p>
                                 </div>
@@ -1600,7 +1600,7 @@ export default function WorkspacePage() {
                     return (
                     <div key={school.id} className="overflow-hidden rounded-lg border border-border bg-card">
                       {!hideSchoolHeader && (
-                        <div className="flex items-center gap-3 border-b border-border bg-zinc-50 px-4 py-3">
+                        <div className="flex items-center gap-3 border-b border-border bg-surface-muted px-4 py-3">
                           <SchoolLogoMark school={school} size="row" rounded="md" />
                           <div className="min-w-0 flex-1">
                             <h3 className="font-medium text-foreground">{school.name}</h3>
@@ -1624,7 +1624,7 @@ export default function WorkspacePage() {
                                 "p-3.5 sm:p-4",
                                 useDetailedCard
                                   ? "space-y-3"
-                                  : "flex flex-col gap-3 transition-colors hover:bg-zinc-50 sm:flex-row sm:items-center sm:justify-between"
+                                  : "flex flex-col gap-3 transition-colors hover:bg-surface-muted sm:flex-row sm:items-center sm:justify-between"
                               )}
                             >
                               {useDetailedCard ? (
@@ -1632,7 +1632,7 @@ export default function WorkspacePage() {
                                   <button
                                     type="button"
                                     onClick={() => openProgramDetail(program)}
-                                    className="block w-full px-1 py-1.5 text-left transition-colors hover:bg-zinc-50"
+                                    className="block w-full px-1 py-1.5 text-left transition-colors hover:bg-surface-muted"
                                   >
                                   <div className="flex items-start justify-between gap-2">
                                     <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
@@ -1801,7 +1801,10 @@ export default function WorkspacePage() {
       </Dialog>
 
       <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
-        <SheetContent side="left" className="flex min-h-0 w-[280px] flex-col gap-0 p-0 sm:max-w-[280px]">
+        <SheetContent
+          side="left"
+          className="flex min-h-0 w-[280px] flex-col gap-0 border-r border-border/80 bg-sidebar p-0 sm:max-w-[280px]"
+        >
           <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
             <Link href="/" className="flex min-w-0 items-center gap-2" onClick={() => setMobileSidebarOpen(false)}>
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary">

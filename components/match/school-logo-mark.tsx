@@ -7,7 +7,7 @@ const sizeClass = {
   xs: "h-4 w-4 min-h-4 min-w-4 text-[8px]",
   sm: "h-8 w-8 min-h-8 min-w-8 text-[10px]",
   md: "h-9 w-9 min-h-9 min-w-9 text-xs",
-  "md-wide": "h-9 w-9 min-h-9 min-w-9 text-[11px]",
+  "md-wide": "h-9 w-9 min-h-9 min-w-9 text-ui-label",
   lg: "h-11 w-11 min-h-11 min-w-11 text-sm",
   /** 详情顶栏大徽标 */
   xl: "h-14 w-14 min-h-14 min-w-14 text-lg sm:h-[4.5rem] sm:min-h-[4.5rem] sm:w-[4.5rem] sm:min-w-[4.5rem] sm:text-xl",

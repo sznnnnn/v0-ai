@@ -219,7 +219,7 @@ export default function QuestionnairePage() {
 
   if (!hasEnteredQuestionnaire) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-background via-background to-muted/20 px-6">
+      <div className="ui-page-shell flex items-center justify-center px-6">
         <div className="w-full max-w-xl rounded-2xl border border-border/80 bg-card/95 p-8 shadow-sm">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             你好，怎么称呼你？
@@ -255,7 +255,7 @@ export default function QuestionnairePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-background to-muted/20">
+    <div className="ui-page-shell">
       <GuestBanner />
 
       <header className="sticky top-8 z-40 border-b border-border bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70">

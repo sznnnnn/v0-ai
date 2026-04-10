@@ -107,18 +107,18 @@ export function WorkspaceApplicationsMapImpl({
             />
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-semibold leading-tight text-foreground">{activePin.name}</p>
-              <p className="truncate text-[11px] text-muted-foreground">{activePin.nameEn}</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
+              <p className="truncate text-ui-label text-muted-foreground">{activePin.nameEn}</p>
+              <p className="mt-0.5 text-ui-label text-muted-foreground">
                 {activePin.city} · {activePin.country}
               </p>
             </div>
           </div>
           <div className="mt-2 flex items-center justify-between gap-2">
-            <p className="text-[11px] tabular-nums text-foreground/85">{activePin.programCount} 个项目</p>
+            <p className="text-ui-label tabular-nums text-foreground/85">{activePin.programCount} 个项目</p>
             {onSelectSchool ? (
               <button
                 type="button"
-                className="rounded-md bg-teal-700 px-2 py-1 text-[11px] font-medium text-white hover:bg-teal-800"
+                className="rounded-md bg-teal-700 px-2 py-1 text-ui-label font-medium text-white hover:bg-teal-800"
                 onClick={() => onSelectSchool(activePin.schoolId)}
               >
                 查看该校

@@ -141,7 +141,7 @@ export function TargetPreferencesForm({ data, onChange }: TargetPreferencesFormP
               ))}
             </div>
             <div className="border-t border-border/70 pt-4">
-              <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">其他</p>
+              <p className="ui-section-heading mb-2 uppercase tracking-wider">其他</p>
               <button
                 type="button"
                 onClick={selectUndecidedRegion}
