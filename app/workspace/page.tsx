@@ -805,7 +805,7 @@ export default function WorkspacePage() {
         title: "小布",
         description:
           "我是你的申请助手，小布。跟选校和申请进度，点头像看短提示；选中项目时提示会更贴切。",
-        finishButtonLabel: "开始使用",
+        finishButtonLabel: "我知道了",
         allowMissingTarget: true,
       },
     ];

@@ -223,6 +223,42 @@
 - 文书 AI 能力与匹配智能程度以当前规则实现为主。
 
 --------------------------------------------------
+8.3 工作台左侧栏：院校与项目展示逻辑（实现说明）
+--------------------------------------------------
+实现位置：工作台页 app/workspace/page.tsx 中 sidebarBody 的「项目」区块。
+
+1) 数据来源与「已加项目」列表
+- 本地键 buddyup_added_programs（代码常量 BUDDYUP_ADDED_PROGRAMS_KEY）保存项目 id 数组，顺序即用户加入清单的顺序。
+- 首屏挂载后从 localStorage 读入到 addedProgramIds；测试菜单「尚未添加项目」预览时 effectiveAddedProgramIds 置空，侧栏与主页会按零项目态展示。
+- 当前匹配结果 useMatchResult() 的 result 中，用每个 id 解析出 program 与对应 school；任一在结果中缺失的 id 会被丢弃，不参与展示。
+- 由此得到 addedPrograms：类型为 { program, school }[]，顺序与 addedProgramIds 一致。
+
+2) 侧栏「院校」行列表（schoolsInWorkspace）
+- 从 addedPrograms 按 school.id 去重得到院校集合（同一校多个项目只占一行）。
+- 院校行排序：按院校中文名 school.name 使用 localeCompare(..., "zh-CN") 升序，与加入先后无关。
+- 每行展示：校徽 SchoolLogoMark、中文校名（truncate）、该校下已加项目个数 count（悬停或键盘聚焦父级时显示 count；无操作时为透明）。
+- 无已加项目时：不渲染院校列表，整块显示提示文案「请先在选校结果页勾选项目，列表会自动同步」；列表区域有 ScrollArea，高度上限约 min(40vh, 280px)。
+
+3) 院校下「项目」子列表（展开逻辑与排序）
+- 子列表数据来自 programsBySchool：按 school.id 分组 addedPrograms 中的 program；组内按 program.nameEn 做 localeCompare 升序（与 addedProgramIds 的全局顺序无关，侧栏内按英文名排序）。
+- 仅当该校在侧栏被「选中」且该校至少有一个已加项目时，才渲染缩进子列表（左边框线 + 左边距）；未选中院校时子列表隐藏。
+- 选中态：selectedSchoolId === school.id；点击院校行会切换选中：若当前已是该校则取消选中（selectedSchoolId 置 null），否则选中该校；selectSchool 会清空 selectedProgramId；选中非空院校 id 时会将 activeView 设为 dashboard（回到主页视图）。
+- 每个子项展示：小文件图标 + program.nameEn（truncate），完整英文名在 title 提示里；点击打开项目详情（openProgramDetail：设置 selectedProgramId、activeView 为 dashboard）。
+
+4) 与主区申请列表的联动（筛选，非仅 UI）
+- 全局搜索框 searchQuery 先过滤 addedPrograms 得到 searchFiltered（匹配项目中英名、学校中英名，不区分大小写）。
+- 再按 selectedSchoolId：若为空则主区用全部 searchFiltered；若选中某校则只保留该校的项（displayPrograms）。侧栏选中院校因此会收窄中间「申请列表」等依赖 displayPrograms 的区域。
+
+5) 移除操作
+- 院校行垃圾桶：移除该校下全部已加项目（从 addedProgramIds 批量删除），并清除若指向该校的 selectedSchoolId / 若在被删集合内的 selectedProgramId；需确认弹窗。
+- 项目行垃圾桶：仅移除对应 program id；若当前详情选中的是该项目则清空 selectedProgramId；需确认弹窗。
+- 移除后写回 buddyup_added_programs；文书草稿仍保留在本地（与弹窗文案一致）。
+
+6) 「主页」行与区块标题
+- 侧栏「主页」在 selectedSchoolId 为空且 activeView 为 dashboard 时高亮；悬停时若已有项目则显示已加项目总数（与院校行 count 汇总一致）。
+- 「项目」标题右侧「+」打开「添加项目」对话框，不从侧栏直接写院校列表；新加项目会 append 到 addedProgramIds 并默认选中该校与该项目。
+
+--------------------------------------------------
 9. 一句话流程定位（给对外介绍用）
 --------------------------------------------------
 用户先在问卷构建背景画像，再在匹配页筛选并加入目标项目，随后在工作台按优先级管理申请进度并进入文书编辑，所有操作在本地自动保存，形成可反复优化的申请闭环。
