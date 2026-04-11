@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
+import { useWorkspaceVisited } from "@/hooks/use-workspace-visited";
+import { WORKSPACE_BACKGROUND_HREF } from "@/lib/workspace-visited";
 import {
   ExternalLink,
   FileText,
@@ -153,6 +155,7 @@ const AVATAR_SIZES = ["size-6 md:size-8", "size-8 md:size-12", "size-10 md:size-
 
 export default function HomePage() {
   const [coverFailed, setCoverFailed] = useState(false);
+  const workspaceVisited = useWorkspaceVisited();
 
   return (
     <div className="min-h-screen bg-white text-neutral-900 antialiased">
@@ -196,8 +199,14 @@ export default function HomePage() {
               AI 驱动的留学文书助手，陪你走完申请季。
             </p>
             <div className="mt-8 flex justify-center">
-              <Link href="/questionnaire" className={cn(btnPrimary, "px-8 py-3")} aria-label="开启申请旅程，前往问卷">
-                开启申请旅程
+              <Link
+                href={workspaceVisited ? WORKSPACE_BACKGROUND_HREF : "/questionnaire"}
+                className={cn(btnPrimary, "px-8 py-3")}
+                aria-label={
+                  workspaceVisited ? "进入工作台，打开我的背景" : "开启申请旅程，前往问卷"
+                }
+              >
+                {workspaceVisited ? "进入工作台" : "开启申请旅程"}
               </Link>
             </div>
           </div>

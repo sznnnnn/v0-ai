@@ -64,6 +64,7 @@ import {
   setTemplateSourceProgram,
   type DraftContext,
 } from "@/lib/document-drafts";
+import { BUDDYUP_ADDED_PROGRAMS_KEY } from "@/lib/buddyup-local-storage";
 import type { QuestionnaireData } from "@/lib/types";
 
 function draftContextFromPair(pair: {
@@ -437,7 +438,7 @@ export function WriteDocumentPageClient({ programId }: { programId: string }) {
   const seededProgramRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const raw = localStorage.getItem("edumatch_added_programs");
+    const raw = localStorage.getItem(BUDDYUP_ADDED_PROGRAMS_KEY);
     if (raw) {
       try {
         setAddedIds(JSON.parse(raw) as string[]);

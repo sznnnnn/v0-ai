@@ -12,12 +12,12 @@
 2) 数据存储方式
 - 关键数据均写入浏览器 localStorage。
 - 主要键包括：
-  a. edumatch_questionnaire（问卷）
-  b. edumatch_match_result（匹配结果）
-  c. edumatch_added_programs（加入工作台的项目清单）
-  d. edumatch_application_status（项目申请状态）
-  e. edumatch_document_drafts（文书草稿）
-  f. edumatch_document_draft_versions（文书历史版本）
+  a. buddyup_questionnaire（问卷）
+  b. buddyup_match_result（匹配结果）
+  c. buddyup_added_programs（加入工作台的项目清单）
+  d. buddyup_application_status（项目申请状态）
+  e. buddyup_document_drafts（文书草稿）
+  f. buddyup_document_draft_versions（文书历史版本）
 
 3) Demo 定位
 - 重点是“流程可走通、体验完整、结果可见”。
@@ -88,7 +88,7 @@
   - 可一键加入该校当前匹配结果内全部项目。
   - 若全部已加入，支持一键移除。
   - 若部分已加入，显示“部分已加”并可补齐。
-- 已加入项目写入 edumatch_added_programs，用于工作台渲染。
+- 已加入项目写入 buddyup_added_programs，用于工作台渲染。
 
 3.4 重匹配与回跳
 - 用户可点击“重新匹配”，基于最新问卷信息重算结果。
@@ -103,8 +103,8 @@
 --------------------------------------------------
 4.1 工作台初始化
 - 页面读取：
-  a. edumatch_added_programs（用户已添加项目）
-  b. edumatch_application_status（项目状态）
+  a. buddyup_added_programs（用户已添加项目）
+  b. buddyup_application_status（项目状态）
   c. 文书草稿汇总（用于“我的文书”等区域）
 - 形成“可执行申请清单”。
 
@@ -151,7 +151,7 @@
   b. 简历大纲（CV）
   c. Why School
   d. 推荐信提纲
-- 编辑内容自动保存（debounce）到 edumatch_document_drafts。
+- 编辑内容自动保存（debounce）到 buddyup_document_drafts。
 - 支持多类型切换、历史版本能力（版本存储键独立）。
 
 5.3 文书与问卷/项目数据的联动
@@ -192,19 +192,19 @@
 7. 用户视角下的数据生命周期
 --------------------------------------------------
 1) 问卷阶段
-- 用户输入背景信息 -> 存入 edumatch_questionnaire。
+- 用户输入背景信息 -> 存入 buddyup_questionnaire。
 
 2) 匹配阶段
-- 基于问卷生成结果 -> 存入 edumatch_match_result。
-- 勾选项目 -> 写入 edumatch_added_programs。
+- 基于问卷生成结果 -> 存入 buddyup_match_result。
+- 勾选项目 -> 写入 buddyup_added_programs。
 
 3) 工作台阶段
-- 更新申请状态 -> 写入 edumatch_application_status。
-- 调整排序/加减项目 -> 更新 edumatch_added_programs。
+- 更新申请状态 -> 写入 buddyup_application_status。
+- 调整排序/加减项目 -> 更新 buddyup_added_programs。
 
 4) 文书阶段
-- 输入草稿 -> 写入 edumatch_document_drafts。
-- 保存历史版本 -> 写入 edumatch_document_draft_versions。
+- 输入草稿 -> 写入 buddyup_document_drafts。
+- 保存历史版本 -> 写入 buddyup_document_draft_versions。
 
 5) 回流与刷新
 - 页面 focus/visibility 变化时刷新文书状态显示，保证跨页面操作后可见一致。

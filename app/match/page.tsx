@@ -12,12 +12,15 @@ import { SchoolRichInfo } from "@/components/match/school-rich-info";
 import { SchoolNotionCover } from "@/components/match/school-notion-cover";
 import { ProgramCard } from "@/components/match/program-card";
 import { useQuestionnaire, useMatchResult } from "@/hooks/use-questionnaire";
+import { useWorkspaceVisited } from "@/hooks/use-workspace-visited";
 import { generateMatchResult } from "@/lib/mock-match";
 import { getDefaultPs } from "@/lib/document-drafts";
 import type { QuestionnaireData, School } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { BubbleSpotlightTour, type BubbleSpotlightStep } from "@/components/onboarding/bubble-spotlight-tour";
+import { BUDDYUP_ADDED_PROGRAMS_KEY } from "@/lib/buddyup-local-storage";
 import { ONBOARDING_MATCH_SPOTLIGHT_V1 } from "@/lib/onboarding-keys";
+import { WORKSPACE_BACKGROUND_HREF } from "@/lib/workspace-visited";
 
 type CategoryFilter = "all" | "reach" | "match" | "safety";
 
@@ -76,6 +79,7 @@ function buildAnalysisSteps(data: QuestionnaireData): AnalysisStep[] {
 
 export default function MatchPage() {
   const router = useRouter();
+  const workspaceVisited = useWorkspaceVisited();
   const {
     data: questionnaireData,
     isLoaded: isQuestionnaireLoaded,
@@ -96,7 +100,7 @@ export default function MatchPage() {
   const persistAddedPrograms = useCallback((ids: string[]) => {
     const normalized = uniqueProgramIds(ids);
     setAddedPrograms(normalized);
-    localStorage.setItem("edumatch_added_programs", JSON.stringify(normalized));
+    localStorage.setItem(BUDDYUP_ADDED_PROGRAMS_KEY, JSON.stringify(normalized));
   }, []);
 
   const clearGenerationTimers = useCallback(() => {
@@ -144,19 +148,19 @@ export default function MatchPage() {
   }, [clearGenerationTimers]);
 
   useEffect(() => {
-    const stored = localStorage.getItem("edumatch_added_programs");
+    const stored = localStorage.getItem(BUDDYUP_ADDED_PROGRAMS_KEY);
     if (!stored) return;
     try {
       const parsed = JSON.parse(stored);
       if (!Array.isArray(parsed)) {
-        localStorage.removeItem("edumatch_added_programs");
+        localStorage.removeItem(BUDDYUP_ADDED_PROGRAMS_KEY);
         return;
       }
       const normalized = uniqueProgramIds(parsed.filter((item): item is string => typeof item === "string"));
       setAddedPrograms(normalized);
-      localStorage.setItem("edumatch_added_programs", JSON.stringify(normalized));
+      localStorage.setItem(BUDDYUP_ADDED_PROGRAMS_KEY, JSON.stringify(normalized));
     } catch {
-      localStorage.removeItem("edumatch_added_programs");
+      localStorage.removeItem(BUDDYUP_ADDED_PROGRAMS_KEY);
     }
   }, []);
 
@@ -373,7 +377,12 @@ export default function MatchPage() {
                 跳过动画
               </Button>
               <Button type="button" variant="ghost" size="sm" asChild>
-                <Link href="/questionnaire">返回问卷</Link>
+                <Link
+                  href={workspaceVisited ? WORKSPACE_BACKGROUND_HREF : "/questionnaire"}
+                  aria-label={workspaceVisited ? "去我的背景" : "返回问卷"}
+                >
+                  {workspaceVisited ? "去我的背景" : "返回问卷"}
+                </Link>
               </Button>
             </div>
           </div>
@@ -389,7 +398,7 @@ export default function MatchPage() {
       <header className="sticky top-8 z-40 border-b border-border bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
           <Link href="/" className="text-lg font-semibold tracking-tight text-foreground">
-            EduMatch
+            BuddyUp
           </Link>
 
           <div className="flex items-center gap-3">
@@ -413,19 +422,21 @@ export default function MatchPage() {
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Link href="/questionnaire">
+                  <Link href={workspaceVisited ? WORKSPACE_BACKGROUND_HREF : "/questionnaire"}>
                     <Button
                       variant="ghost"
                       size="sm"
                       className="h-8 gap-1.5 px-2.5 text-muted-foreground hover:bg-background hover:text-foreground"
-                      aria-label="返回问卷"
+                      aria-label={workspaceVisited ? "去我的背景" : "返回问卷"}
                     >
                       <ArrowLeft className="h-3.5 w-3.5" />
-                      <span className="text-xs">返回问卷</span>
+                      <span className="text-xs">{workspaceVisited ? "去我的背景" : "返回问卷"}</span>
                     </Button>
                   </Link>
                 </TooltipTrigger>
-                <TooltipContent side="bottom">返回问卷</TooltipContent>
+                <TooltipContent side="bottom">
+                  {workspaceVisited ? "工作台 · 我的背景" : "返回问卷"}
+                </TooltipContent>
               </Tooltip>
             </div>
             <Tooltip>
@@ -451,7 +462,9 @@ export default function MatchPage() {
       >
         {!completionStatus.canGenerateMatch && (
           <div className="mb-4 rounded-lg border border-amber-300/70 bg-amber-50/70 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200">
-            当前为草稿匹配视图：请先在问卷补齐个人信息与教育背景，再进行正式匹配。
+            {workspaceVisited
+              ? "当前为草稿匹配视图：请在工作台「我的背景」补齐个人信息与教育背景，再进行正式匹配。"
+              : "当前为草稿匹配视图：请先在问卷补齐个人信息与教育背景，再进行正式匹配。"}
           </div>
         )}
         <div className="grid gap-6 lg:grid-cols-[minmax(288px,320px)_1fr]">

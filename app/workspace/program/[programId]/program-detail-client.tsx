@@ -31,8 +31,10 @@ import { SchoolRichInfo } from "@/components/match/school-rich-info";
 import { useMatchResult } from "@/hooks/use-questionnaire";
 import { clearProgramDrafts, DOCUMENT_DRAFT_ORDER, getDraft } from "@/lib/document-drafts";
 
-const ADDED_PROGRAMS_KEY = "edumatch_added_programs";
-const FAVORITE_PROGRAMS_KEY = "edumatch_favorite_programs";
+import { BUDDYUP_ADDED_PROGRAMS_KEY, BUDDYUP_FAVORITE_PROGRAMS_KEY } from "@/lib/buddyup-local-storage";
+
+const ADDED_PROGRAMS_KEY = BUDDYUP_ADDED_PROGRAMS_KEY;
+const FAVORITE_PROGRAMS_KEY = BUDDYUP_FAVORITE_PROGRAMS_KEY;
 
 function formatDate(v: string) {
   if (!v) return "未填写";

@@ -90,6 +90,8 @@ import { useMatchResult, useQuestionnaire } from "@/hooks/use-questionnaire";
 import { initialQuestionnaireData, type Program, type QuestionnaireData, type School } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { BubbleSpotlightTour, type BubbleSpotlightStep } from "@/components/onboarding/bubble-spotlight-tour";
+import { BUDDYUP_ADDED_PROGRAMS_KEY, BUDDYUP_APPLICATION_STATUS_KEY } from "@/lib/buddyup-local-storage";
+import { QUESTIONNAIRE_TEST_HREF } from "@/lib/workspace-visited";
 import { ONBOARDING_WORKSPACE_SPOTLIGHT_V1 } from "@/lib/onboarding-keys";
 import {
   clearProgramDrafts,
@@ -465,13 +467,25 @@ export default function WorkspacePage() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("view") !== "background") return;
+    params.delete("view");
+    const qs = params.toString();
+    router.replace(`/workspace${qs ? `?${qs}` : ""}`, { scroll: false });
+    setSelectedSchoolId(null);
+    setSelectedProgramId(null);
+    setActiveView("background");
+  }, [router]);
+
+  useEffect(() => {
     setDraftStorageReady(true);
-    const storedPrograms = localStorage.getItem("edumatch_added_programs");
+    const storedPrograms = localStorage.getItem(BUDDYUP_ADDED_PROGRAMS_KEY);
     if (storedPrograms) {
       setAddedProgramIds(JSON.parse(storedPrograms));
     }
 
-    const storedStatus = localStorage.getItem("edumatch_application_status");
+    const storedStatus = localStorage.getItem(BUDDYUP_APPLICATION_STATUS_KEY);
     if (storedStatus) {
       setApplications(JSON.parse(storedStatus));
     }
@@ -985,14 +999,14 @@ export default function WorkspacePage() {
   const updateStatus = (programId: string, status: ApplicationItem["status"]) => {
     const updated = { ...applications, [programId]: status };
     setApplications(updated);
-    localStorage.setItem("edumatch_application_status", JSON.stringify(updated));
+    localStorage.setItem(BUDDYUP_APPLICATION_STATUS_KEY, JSON.stringify(updated));
     setLiveMessage(`申请状态已更新为${statusConfig[status].label}`);
   };
 
   const removeProgram = (programId: string) => {
     const updated = addedProgramIds.filter((id) => id !== programId);
     setAddedProgramIds(updated);
-    localStorage.setItem("edumatch_added_programs", JSON.stringify(updated));
+    localStorage.setItem(BUDDYUP_ADDED_PROGRAMS_KEY, JSON.stringify(updated));
     if (selectedProgramId === programId) {
       setSelectedProgramId(null);
     }
@@ -1011,7 +1025,7 @@ export default function WorkspacePage() {
     if (idsToRemove.size === 0) return;
     const updated = addedProgramIds.filter((id) => !idsToRemove.has(id));
     setAddedProgramIds(updated);
-    localStorage.setItem("edumatch_added_programs", JSON.stringify(updated));
+    localStorage.setItem(BUDDYUP_ADDED_PROGRAMS_KEY, JSON.stringify(updated));
     if (selectedProgramId && idsToRemove.has(selectedProgramId)) {
       setSelectedProgramId(null);
     }
@@ -1031,7 +1045,7 @@ export default function WorkspacePage() {
     setTestDashboardEmptyPreview(false);
     const updated = [...addedProgramIds, program.id];
     setAddedProgramIds(updated);
-    localStorage.setItem("edumatch_added_programs", JSON.stringify(updated));
+    localStorage.setItem(BUDDYUP_ADDED_PROGRAMS_KEY, JSON.stringify(updated));
     setSelectedSchoolId(program.schoolId);
     setSelectedProgramId(program.id);
     setActiveView("dashboard");
@@ -1536,7 +1550,7 @@ export default function WorkspacePage() {
           <span>使用说明</span>
         </button>
         <a
-          href="mailto:?subject=EduMatch%20%E7%94%A8%E6%88%B7%E5%8F%8D%E9%A6%88"
+          href="mailto:?subject=BuddyUp%20%E7%94%A8%E6%88%B7%E5%8F%8D%E9%A6%88"
           className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors duration-150 ease-in-out hover:bg-interactive-hover hover:text-foreground"
           onClick={() => opts.onPick?.()}
         >
@@ -1701,7 +1715,7 @@ export default function WorkspacePage() {
             <DropdownMenuItem
               onClick={() => {
                 opts.onPick?.();
-                router.push("/questionnaire");
+                router.push(QUESTIONNAIRE_TEST_HREF);
               }}
             >
               问卷
@@ -2187,24 +2201,20 @@ export default function WorkspacePage() {
                         <p className="min-w-0 leading-relaxed">
                           <span className="font-medium text-foreground">背景信息还不完整</span>
                           <span className="text-amber-950/90 dark:text-amber-100/90">
-                            。你已在使用工作台主页；补充问卷中的必填项后，匹配与文书建议会更准确。
+                            。你已在使用工作台主页；请在「我的背景」补齐必填项后，匹配与文书建议会更准确。
                           </span>
                         </p>
                         <div className="flex shrink-0 flex-wrap gap-2">
-                          <Button size="sm" className="h-8" asChild>
-                            <Link href="/questionnaire">去问卷补充</Link>
-                          </Button>
                           <Button
                             type="button"
                             size="sm"
-                            variant="outline"
-                            className="h-8 border-amber-300/80 bg-background/80 text-foreground hover:bg-amber-100/80 dark:border-amber-800 dark:hover:bg-amber-950/50"
+                            className="h-8"
                             onClick={() => {
                               clearWorkspaceTestPreviews();
                               openBackgroundSummary();
                             }}
                           >
-                            查看我的背景
+                            去我的背景补充
                           </Button>
                         </div>
                       </div>
@@ -2655,7 +2665,7 @@ export default function WorkspacePage() {
               {!selectedSchool && !selectedProgramPair && activeView === "usageGuide" && (
                 <section className="space-y-6" aria-label="使用说明">
                   <header className="space-y-1 border-b border-border pb-4 text-left">
-                    <h1 className="text-lg font-semibold tracking-tight text-foreground">EduMatch 使用说明</h1>
+                    <h1 className="text-lg font-semibold tracking-tight text-foreground">BuddyUp 使用说明</h1>
                     <p className="text-sm text-muted-foreground">
                       产品定位、数据来源、团队背景与工作台操作
                     </p>
@@ -2666,7 +2676,7 @@ export default function WorkspacePage() {
                         产品定位
                       </h2>
                       <p>
-                        EduMatch 是<strong className="font-medium text-foreground">演示型</strong>
+                        BuddyUp 是<strong className="font-medium text-foreground">演示型</strong>
                         留学匹配产品，把「问卷 → 匹配结果 → 申请工作台 → 文书草稿」串成可走完的闭环，便于展示流程与做用户访谈；当前版本
                         <strong className="font-medium text-foreground">不替代</strong>
                         院校官方招生系统，也不提供真实录取预测。
@@ -2845,7 +2855,7 @@ export default function WorkspacePage() {
                               newOrder
                             );
                             setAddedProgramIds(next);
-                            localStorage.setItem("edumatch_added_programs", JSON.stringify(next));
+                            localStorage.setItem(BUDDYUP_ADDED_PROGRAMS_KEY, JSON.stringify(next));
                             setLiveMessage("已更新列表排序");
                           }}
                         >

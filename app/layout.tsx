@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import { BuddyupLegacyStorageMigration } from '@/components/buddyup-legacy-storage-migration'
 import { GlobalTestMenu } from '@/components/global-test-menu'
 import './globals.css'
 
@@ -39,6 +40,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="font-sans antialiased">
+        <BuddyupLegacyStorageMigration />
         {children}
         <GlobalTestMenu />
         {process.env.NODE_ENV === 'production' && <Analytics />}

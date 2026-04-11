@@ -49,9 +49,19 @@ export function QuestionnaireBuddy({
       ? "min-w-0 flex-1 max-w-none"
       : "min-w-0 flex-1 max-w-[min(36rem,calc(100vw-4.5rem))] lg:w-full lg:max-w-none lg:flex-none";
 
+  const bubbleChrome =
+    mode === "intro"
+      ? "border-0 bg-transparent px-0 py-0 shadow-none"
+      : "rounded-xl border border-border/90 bg-card px-4 py-3 shadow-sm";
+
   return (
     <div className={cn(rootLayout, className)}>
-      <div className="shrink-0 rounded-full ring-2 ring-border ring-offset-2 ring-offset-background">
+      <div
+        className={cn(
+          "shrink-0 rounded-full",
+          mode === "intro" ? "ring-1 ring-border/60 ring-offset-1 ring-offset-background" : "ring-2 ring-border ring-offset-2 ring-offset-background"
+        )}
+      >
         <Image
           src="/workspace-buddy-avatar.png"
           alt=""
@@ -64,17 +74,24 @@ export function QuestionnaireBuddy({
       <div
         role="status"
         aria-live="polite"
-        className={cn(
-          "rounded-xl border border-border/90 bg-card px-4 py-3 text-left shadow-sm",
-          bubbleLayout
-        )}
+        className={cn("text-left", bubbleChrome, bubbleLayout)}
       >
         <div
           key={message}
           className="animate-in fade-in slide-in-from-bottom-1 duration-300"
         >
           <p className="text-xs font-medium leading-snug text-muted-foreground">小布</p>
-          <p className="mt-1.5 text-sm leading-relaxed text-foreground">{message}</p>
+          <p
+            id={mode === "intro" ? "questionnaire-intro-prompt" : undefined}
+            className={cn(
+              "text-foreground",
+              mode === "intro"
+                ? "mt-2 text-xl font-semibold leading-snug tracking-tight sm:mt-2.5 sm:text-2xl sm:leading-tight"
+                : "mt-1.5 text-sm leading-relaxed"
+            )}
+          >
+            {message}
+          </p>
         </div>
       </div>
     </div>

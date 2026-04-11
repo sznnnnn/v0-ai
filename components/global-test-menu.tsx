@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { QUESTIONNAIRE_TEST_HREF } from "@/lib/workspace-visited";
 
 /** 主工作台侧栏已有完整「测试」菜单，避免重复 */
 export function GlobalTestMenu() {
@@ -57,7 +58,7 @@ export function GlobalTestMenu() {
             其他页面
           </DropdownMenuLabel>
           <DropdownMenuItem onClick={() => router.push("/")}>落地页</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => router.push("/questionnaire")}>问卷</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push(QUESTIONNAIRE_TEST_HREF)}>问卷</DropdownMenuItem>
           <DropdownMenuItem onClick={() => router.push("/match?replaySpotlight=1")}>
             匹配页 · 气泡引导（重播）
           </DropdownMenuItem>

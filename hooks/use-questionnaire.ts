@@ -3,10 +3,11 @@
 import { useState, useEffect, useCallback } from "react";
 import type { QuestionnaireData, MatchResult } from "@/lib/types";
 import { initialQuestionnaireData } from "@/lib/types";
+import { BUDDYUP_MATCH_RESULT_KEY, BUDDYUP_QUESTIONNAIRE_KEY } from "@/lib/buddyup-local-storage";
 import { enrichSchool } from "@/lib/school-enrichment";
 
-const STORAGE_KEY = "edumatch_questionnaire";
-const MATCH_RESULT_KEY = "edumatch_match_result";
+const STORAGE_KEY = BUDDYUP_QUESTIONNAIRE_KEY;
+const MATCH_RESULT_KEY = BUDDYUP_MATCH_RESULT_KEY;
 
 export function useQuestionnaire() {
   const [data, setData] = useState<QuestionnaireData>(initialQuestionnaireData);

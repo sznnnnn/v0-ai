@@ -1,3 +1,4 @@
+import { BUDDYUP_SCHOOL_HERO_CACHE_PREFIX } from "./buddyup-local-storage";
 import type { School } from "./types";
 
 const SCHOOL_WIKI_TITLE: Record<string, string> = {
@@ -21,7 +22,7 @@ const SCHOOL_WIKI_TITLE: Record<string, string> = {
   ubc: "University_of_British_Columbia",
 };
 
-const CACHE_PREFIX = "edumatch_school_hero_";
+const CACHE_PREFIX = BUDDYUP_SCHOOL_HERO_CACHE_PREFIX;
 
 function cacheKey(schoolId: string) {
   return `${CACHE_PREFIX}${schoolId}`;

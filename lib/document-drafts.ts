@@ -1,3 +1,8 @@
+import {
+  BUDDYUP_DOCUMENT_DRAFTS_KEY,
+  BUDDYUP_DOCUMENT_DRAFT_VERSIONS_KEY,
+  BUDDYUP_DOCUMENT_TEMPLATE_SOURCE_META_KEY,
+} from "./buddyup-local-storage";
 import type { QuestionnaireData } from "./types";
 
 export type DocumentDraftKind = "ps" | "cv" | "why_school" | "rl_outline";
@@ -11,9 +16,9 @@ export const DOCUMENT_DRAFT_LABELS: Record<DocumentDraftKind, string> = {
 
 export const DOCUMENT_DRAFT_ORDER: DocumentDraftKind[] = ["ps", "cv", "why_school", "rl_outline"];
 
-const STORAGE_KEY = "edumatch_document_drafts";
-const VERSION_STORAGE_KEY = "edumatch_document_draft_versions";
-const TEMPLATE_SOURCE_META_KEY = "edumatch_document_template_source";
+const STORAGE_KEY = BUDDYUP_DOCUMENT_DRAFTS_KEY;
+const VERSION_STORAGE_KEY = BUDDYUP_DOCUMENT_DRAFT_VERSIONS_KEY;
+const TEMPLATE_SOURCE_META_KEY = BUDDYUP_DOCUMENT_TEMPLATE_SOURCE_META_KEY;
 /** 与项目草稿同库，键前缀用于四套「模版文书」正文（来自首次写入的项目） */
 const TEMPLATE_KEY_PREFIX = "__tmpl__::";
 /** 首次生成并保存的 PS，作为全局主文书（用于改写其它文书类型） */

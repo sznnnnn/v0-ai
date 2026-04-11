@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,9 @@ import { HonorsForm } from "@/components/questionnaire/steps/honors";
 import { SkillsForm } from "@/components/questionnaire/steps/skills";
 import { ExtensionQuestionsForm } from "@/components/questionnaire/steps/extension-questions";
 import { useQuestionnaire } from "@/hooks/use-questionnaire";
+import { readWorkspaceVisited, WORKSPACE_BACKGROUND_HREF } from "@/lib/workspace-visited";
+
+const TEST_QUESTIONNAIRE_PARAM = "testQuestionnaire";
 import type { QuestionnaireData } from "@/lib/types";
 import {
   getSampleQuestionnaireDemoPayload,
@@ -54,6 +57,16 @@ export default function QuestionnairePage() {
     ],
     []
   );
+
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    // 测试菜单入口：保留 query，否则下一步 effect 跑完会按「已访问工作台」被重定向走
+    if (params.get(TEST_QUESTIONNAIRE_PARAM) === "1") return;
+    if (readWorkspaceVisited()) {
+      router.replace(WORKSPACE_BACKGROUND_HREF);
+    }
+  }, [router]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -212,38 +225,34 @@ export default function QuestionnairePage() {
 
   if (!hasEnteredQuestionnaire) {
     return (
-      <div className="ui-page-shell flex min-h-[100dvh] items-center justify-center px-4 py-8 sm:px-6">
-        <div className="w-full max-w-lg">
-          <div className="rounded-2xl border border-border/80 bg-card/95 p-5 shadow-sm sm:p-8">
-            <QuestionnaireBuddy mode="intro" className="border-b border-border/70 pb-5 sm:pb-6" />
-            <h1 className="mt-5 text-xl font-semibold tracking-tight text-foreground sm:mt-6 sm:text-2xl">
-              你好，怎么称呼你？
-            </h1>
-            <div className="mt-4 flex min-w-0 items-center gap-2 sm:mt-5">
-              <input
-                type="text"
-                value={introName}
-                onChange={(e) => setIntroName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleEnterQuestionnaire();
-                  }
-                }}
-                placeholder="你的称呼"
-                autoFocus
-                className="h-12 min-w-0 flex-1 rounded-lg border border-border bg-background px-4 text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-foreground/40"
-              />
-              <Button
-                type="button"
-                onClick={handleEnterQuestionnaire}
-                disabled={!introName.trim()}
-                className="h-12 min-w-11 shrink-0 px-0 text-lg sm:min-w-12"
-                aria-label="进入下一题"
-              >
-                {">"}
-              </Button>
-            </div>
+      <div className="ui-page-shell flex min-h-[100dvh] flex-col justify-center px-4 py-10 sm:px-6 sm:py-12">
+        <div className="mx-auto w-full max-w-md space-y-8">
+          <QuestionnaireBuddy mode="intro" />
+          <div className="flex min-w-0 items-center gap-2">
+            <input
+              type="text"
+              value={introName}
+              onChange={(e) => setIntroName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleEnterQuestionnaire();
+                }
+              }}
+              placeholder="你的称呼"
+              autoFocus
+              aria-describedby="questionnaire-intro-prompt"
+              className="h-12 min-w-0 flex-1 rounded-lg border border-input bg-background px-4 text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            />
+            <Button
+              type="button"
+              onClick={handleEnterQuestionnaire}
+              disabled={!introName.trim()}
+              className="h-12 min-w-11 shrink-0 px-0 text-lg sm:min-w-12"
+              aria-label="进入下一题"
+            >
+              {">"}
+            </Button>
           </div>
         </div>
       </div>
@@ -257,7 +266,7 @@ export default function QuestionnairePage() {
       <header className="sticky top-8 z-40 border-b border-border bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
           <Link href="/" className="text-lg font-semibold tracking-tight text-foreground">
-            EduMatch
+            BuddyUp
           </Link>
 
           <div className="flex items-center gap-2">
@@ -274,13 +283,9 @@ export default function QuestionnairePage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-8 pb-28">
+      <main className="mx-auto max-w-6xl px-6 pb-28 pt-0">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(200px,260px)_minmax(0,1fr)] lg:gap-x-8 lg:items-start">
           <div className="col-span-full">
-            <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-              <span>完成度</span>
-              <span>{progress}%</span>
-            </div>
             <div className="h-1.5 rounded-full bg-muted">
               <div
                 className="h-full rounded-full bg-foreground/80 transition-all duration-300"
@@ -315,10 +320,7 @@ export default function QuestionnairePage() {
             )}
 
             <div className="min-h-[min(70vh,520px)] pr-1">
-              <section
-                key={currentStep}
-                className="rounded-xl border border-border/80 bg-card/95 p-8"
-              >
+              <section key={currentStep} className="py-1 sm:py-2">
                 {stepForm}
               </section>
             </div>
