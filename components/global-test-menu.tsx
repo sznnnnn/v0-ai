@@ -45,7 +45,7 @@ export function GlobalTestMenu() {
           <DropdownMenuLabel className="text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
             工作台内
           </DropdownMenuLabel>
-          <DropdownMenuItem onClick={() => goWorkspace("buddy")}>主页 · 申请助手引导</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => goWorkspace("spotlight")}>主页 · 工作台引导（重播）</DropdownMenuItem>
           <DropdownMenuItem onClick={() => goWorkspace("home")}>主页</DropdownMenuItem>
           <DropdownMenuItem onClick={() => goWorkspace("applications")}>主页 · 申请列表</DropdownMenuItem>
           <DropdownMenuItem onClick={() => goWorkspace("background")}>我的背景</DropdownMenuItem>
@@ -58,6 +58,9 @@ export function GlobalTestMenu() {
           </DropdownMenuLabel>
           <DropdownMenuItem onClick={() => router.push("/")}>落地页</DropdownMenuItem>
           <DropdownMenuItem onClick={() => router.push("/questionnaire")}>问卷</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push("/match?replaySpotlight=1")}>
+            匹配页 · 气泡引导（重播）
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => router.push("/match")}>匹配</DropdownMenuItem>
           <DropdownMenuItem onClick={() => router.push("/background")}>背景页</DropdownMenuItem>
         </DropdownMenuContent>

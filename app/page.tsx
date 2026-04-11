@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import {
-  ArrowRight,
   ExternalLink,
   FileText,
   GitCompare,
@@ -26,8 +25,6 @@ const linkFocus =
   "rounded-md outline-none transition-colors focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white";
 const btnPrimary =
   "inline-flex items-center justify-center rounded-xl bg-neutral-900 px-6 py-2.5 text-base font-medium text-white transition-colors hover:bg-neutral-800 " + linkFocus;
-const btnSecondary =
-  "inline-flex items-center justify-center gap-2 rounded-xl border border-neutral-300 bg-white px-6 py-2.5 text-base font-medium text-neutral-900 transition-colors hover:bg-neutral-50 " + linkFocus;
 const navLink = "rounded-md px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-200 " + linkFocus;
 
 type DescriptionItem = { title: string; description?: string };
@@ -160,12 +157,12 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-white text-neutral-900 antialiased">
       <header className="sticky top-0 z-50 border-b border-neutral-100 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
-        <div className="mx-auto grid max-w-7xl grid-cols-2 items-center gap-3 px-4 py-3 sm:px-6 md:grid-cols-3">
-          <Link href="/" className={cn("flex w-fit items-center gap-2 font-semibold tracking-tight", linkFocus)}>
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+          <Link href="/" className={cn("flex w-fit shrink-0 items-center gap-2 font-semibold tracking-tight", linkFocus)}>
             <span className="rounded-md bg-neutral-900 px-2 py-0.5 text-xs font-bold text-white">BU</span>
             <span>BuddyUp</span>
           </Link>
-          <nav className="hidden justify-center md:flex" aria-label="主导航">
+          <nav className="hidden flex-1 justify-center md:flex" aria-label="主导航">
             <a href={`${BUDDYUP_SITE}/pricing`} target="_blank" rel="noreferrer" className={navLink}>
               定价
             </a>
@@ -176,23 +173,6 @@ export default function HomePage() {
               联系
             </a>
           </nav>
-          <div className="flex justify-end gap-2">
-            <Link href="/questionnaire" className={cn("hidden rounded-xl border border-neutral-200 px-3 py-2 text-sm font-medium sm:inline-flex", linkFocus)}>
-              体验 Demo
-            </Link>
-            <a
-              href={BUDDYUP_BETA_FORM}
-              target="_blank"
-              rel="noreferrer"
-              className={cn(
-                "rounded-xl bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-800",
-                linkFocus
-              )}
-              aria-label="参与 BuddyUp 内测（在新标签页打开）"
-            >
-              参与内测
-            </a>
-          </div>
         </div>
       </header>
 
@@ -215,32 +195,11 @@ export default function HomePage() {
             <p className="mt-5 max-w-xl text-pretty text-lg font-medium text-neutral-700 md:mt-6 md:text-xl">
               AI 驱动的留学文书助手，陪你走完申请季。
             </p>
-            <div
-              className="mt-8 flex w-full max-w-md flex-col items-stretch gap-3 sm:max-w-none sm:flex-row sm:justify-center"
-              role="group"
-              aria-label="主要操作"
-            >
-              <a
-                href={BUDDYUP_BETA_FORM}
-                target="_blank"
-                rel="noreferrer"
-                className={btnPrimary}
-                aria-label="参与 BuddyUp 内测（在新标签页打开）"
-              >
-                参与 BuddyUp 内测
-              </a>
-              <Link href="/questionnaire" className={btnSecondary}>
-                本地体验全流程
-                <ArrowRight className="h-4 w-4 shrink-0" aria-hidden />
+            <div className="mt-8 flex justify-center">
+              <Link href="/questionnaire" className={cn(btnPrimary, "px-8 py-3")} aria-label="开启申请旅程，前往问卷">
+                开启申请旅程
               </Link>
             </div>
-            <p className="mt-5 max-w-lg text-pretty text-sm leading-relaxed text-neutral-600">
-              产品介绍与定价见官网{" "}
-              <a href={BUDDYUP_SITE} className={cn("font-medium text-neutral-900 underline decoration-neutral-300 underline-offset-4", linkFocus)}>
-                buddyup.studio
-              </a>
-              。下方 Demo 在浏览器本地运行，无需注册。
-            </p>
           </div>
           <div className="mx-auto mt-10 w-full max-w-5xl md:mt-12">
             {!coverFailed ? (
@@ -400,7 +359,7 @@ export default function HomePage() {
           <div className="mx-auto max-w-6xl">
             <div className="max-w-2xl">
               <h2 id="beta-heading" className="text-3xl font-bold tracking-tight md:text-4xl">
-                免费内测
+                参与内测
               </h2>
               <p className="mt-3 text-base leading-relaxed text-neutral-600 md:text-lg">
                 正式能力以内测渠道为准；也可先在本地跑通问卷与匹配流程。
@@ -413,16 +372,9 @@ export default function HomePage() {
                 <p className="mt-2 text-sm leading-relaxed text-neutral-600 md:text-base">
                   提交内测申请后，团队会按说明与你联系；与官网流程一致。
                 </p>
-                <a href={BUDDYUP_BETA_FORM} target="_blank" rel="noreferrer" className={cn(btnPrimary, "mt-6 w-fit")} aria-label="参与 BuddyUp 内测（在新标签页打开）">
-                  参与 BuddyUp 内测
+                <a href={BUDDYUP_BETA_FORM} target="_blank" rel="noreferrer" className={cn(btnPrimary, "mt-6 w-fit")} aria-label="直接参与内测（在新标签页打开）">
+                  直接参与内测
                 </a>
-                <p className="mt-6 border-t border-neutral-100 pt-6 text-sm leading-relaxed text-neutral-600">
-                  想先看交互？{" "}
-                  <Link href="/questionnaire" className={cn("font-semibold text-neutral-900 underline decoration-neutral-300 underline-offset-4", linkFocus)}>
-                    打开本地全流程 Demo
-                  </Link>
-                  （数据仅存本机）。
-                </p>
               </div>
               <FeatureCard
                 title="抢先体验资格"

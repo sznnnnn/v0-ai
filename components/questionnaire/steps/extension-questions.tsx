@@ -34,8 +34,8 @@ export function ExtensionQuestionsForm({ data, onChange }: ExtensionQuestionsFor
               placeholder="如就业方向、读博、回国、间隔年等"
               value={data.futurePlan}
               onChange={(e) => handleChange("futurePlan", e.target.value)}
-              rows={5}
-              className="min-h-[8rem] resize-y border-border/80 bg-transparent text-sm shadow-none focus-visible:ring-1"
+              rows={3}
+              className="min-h-[5rem] resize-y border-border/80 bg-transparent text-sm shadow-none focus-visible:ring-1"
             />
           </div>
 

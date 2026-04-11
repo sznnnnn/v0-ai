@@ -17,6 +17,8 @@ export type BubbleSpotlightStep = {
   targetSelector: string;
   title: string;
   description: string;
+  /** Last step only: primary button label (default「完成」) */
+  finishButtonLabel?: string;
   /** Padding around the highlighted box */
   padding?: number;
   /**
@@ -267,7 +269,7 @@ export function BubbleSpotlightTour({
               上一步
             </Button>
             <Button ref={primaryBtnRef} type="button" size="sm" className="h-8 text-xs" onClick={goNext}>
-              {isLast ? "完成" : "下一步"}
+              {isLast ? step.finishButtonLabel ?? "完成" : "下一步"}
             </Button>
           </div>
         </div>

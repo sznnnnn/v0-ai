@@ -422,7 +422,7 @@ export default function WorkspacePage() {
   const [workspaceCommandOpen, setWorkspaceCommandOpen] = useState(false);
   const [applications, setApplications] = useState<Record<string, ApplicationItem["status"]>>({});
   const [selectedSchoolId, setSelectedSchoolId] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<"dashboard" | "background">("dashboard");
+  const [activeView, setActiveView] = useState<"dashboard" | "background" | "usageGuide">("dashboard");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [isBackgroundEditing, setIsBackgroundEditing] = useState(false);
   const [backgroundDraft, setBackgroundDraft] = useState<
@@ -432,8 +432,6 @@ export default function WorkspacePage() {
   /** 避免在首屏 render 中读 localStorage，与 SSR 空草稿树一致，消除 hydration mismatch */
   const [draftStorageReady, setDraftStorageReady] = useState(false);
   const [showAllProgramDrafts, setShowAllProgramDrafts] = useState(false);
-  const [usageGuideOpen, setUsageGuideOpen] = useState(false);
-  const [buddyWelcomeDemoOpen, setBuddyWelcomeDemoOpen] = useState(false);
   /** 测试菜单：预览「问卷几乎未填」时的我的背景，不写入 localStorage */
   const [testQuestionnairePreview, setTestQuestionnairePreview] = useState<QuestionnaireData | null>(null);
   /** 测试菜单：预览「尚未添加项目」时的主页空状态，不改动已加项目数据 */
@@ -488,26 +486,19 @@ export default function WorkspacePage() {
     setTestDashboardEmptyPreview(false);
   }, []);
 
-  const openBuddyWelcomeDemo = useCallback(() => {
+  /** 测试菜单 / ?test=spotlight|buddy：重播工作台引导（左侧栏 → 申请列表 → 小布） */
+  const openWorkspaceSpotlightReplay = useCallback(() => {
+    try {
+      window.localStorage.removeItem(ONBOARDING_WORKSPACE_SPOTLIGHT_V1);
+    } catch {
+      /* ignore */
+    }
     clearWorkspaceTestPreviews();
-    setActiveView("dashboard");
     setSelectedSchoolId(null);
     setSelectedProgramId(null);
-    setBuddyWelcomeDemoOpen(true);
-    requestAnimationFrame(() => {
-      document.getElementById("workspace-buddy-anchor")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    });
+    setActiveView("dashboard");
+    requestAnimationFrame(() => setWorkspaceSpotlightOpen(true));
   }, [clearWorkspaceTestPreviews]);
-
-  useEffect(() => {
-    if (!buddyWelcomeDemoOpen) return;
-    if (activeView !== "dashboard" || selectedSchoolId || selectedProgramId) {
-      setBuddyWelcomeDemoOpen(false);
-    }
-  }, [buddyWelcomeDemoOpen, activeView, selectedSchoolId, selectedProgramId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -797,8 +788,10 @@ export default function WorkspacePage() {
       },
       {
         targetSelector: '[data-tour="workspace-buddy-anchor"]',
-        title: "申请助手",
-        description: "用对话整理待办与材料思路；有项目选中时也会结合当前视图给出提示。",
+        title: "小布",
+        description:
+          "我是你的申请助手，小布。跟选校和申请进度，点头像看短提示；选中项目时提示会更贴切。",
+        finishButtonLabel: "开始使用",
         allowMissingTarget: true,
       },
     ];
@@ -1051,6 +1044,7 @@ export default function WorkspacePage() {
   const selectSchool = (id: string | null) => {
     setSelectedProgramId(null);
     setSelectedSchoolId(id);
+    if (id != null) setActiveView("dashboard");
   };
 
   const jumpToApplicationList = () => {
@@ -1062,7 +1056,14 @@ export default function WorkspacePage() {
 
   const openProgramDetail = (program: Program) => {
     setSelectedProgramId(program.id);
+    setActiveView("dashboard");
     setLiveMessage(`已打开项目详情：${program.nameEn}`);
+  };
+
+  const openUsageGuide = () => {
+    setSelectedSchoolId(null);
+    setSelectedProgramId(null);
+    setActiveView("usageGuide");
   };
 
   const pendingRemoveProgramLabel = useMemo(() => {
@@ -1159,19 +1160,18 @@ export default function WorkspacePage() {
     const run = () => {
       switch (test) {
         case "buddy":
-          openBuddyWelcomeDemo();
+        case "spotlight":
+          openWorkspaceSpotlightReplay();
           break;
         case "home":
           setSelectedSchoolId(null);
           setSelectedProgramId(null);
           setActiveView("dashboard");
-          setBuddyWelcomeDemoOpen(false);
           break;
         case "applications":
           setSelectedSchoolId(null);
           setSelectedProgramId(null);
           setActiveView("dashboard");
-          setBuddyWelcomeDemoOpen(false);
           window.setTimeout(() => jumpToApplicationList(), 120);
           break;
         case "background":
@@ -1183,7 +1183,6 @@ export default function WorkspacePage() {
           if (id) {
             selectSchool(id);
             setActiveView("dashboard");
-            setBuddyWelcomeDemoOpen(false);
           }
           break;
         }
@@ -1192,14 +1191,12 @@ export default function WorkspacePage() {
           if (p) {
             openProgramDetail(p);
             setActiveView("dashboard");
-            setBuddyWelcomeDemoOpen(false);
           }
           break;
         }
         case "write": {
           const pid = addedProgramIds[0];
           if (pid) {
-            setBuddyWelcomeDemoOpen(false);
             router.push(`/workspace/write/${pid}`);
           }
           break;
@@ -1214,7 +1211,7 @@ export default function WorkspacePage() {
     draftStorageReady,
     result,
     router,
-    openBuddyWelcomeDemo,
+    openWorkspaceSpotlightReplay,
     clearWorkspaceTestPreviews,
     addedPrograms,
     addedProgramIds,
@@ -1481,6 +1478,7 @@ export default function WorkspacePage() {
                 <Tooltip key={d.programId}>
                   <TooltipTrigger asChild>
                     <Link
+                      prefetch={false}
                       href={`/workspace/write/${d.programId}`}
                       onClick={() => opts.onPick?.()}
                       className="flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-foreground/82 transition-colors duration-150 ease-in-out hover:bg-interactive-hover hover:text-foreground"
@@ -1523,10 +1521,16 @@ export default function WorkspacePage() {
         <button
           type="button"
           onClick={() => {
-            setUsageGuideOpen(true);
+            clearWorkspaceTestPreviews();
+            openUsageGuide();
             opts.onPick?.();
           }}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors duration-150 ease-in-out hover:bg-interactive-hover hover:text-foreground"
+          className={cn(
+            "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors duration-150 ease-in-out",
+            activeView === "usageGuide"
+              ? "bg-interactive-active text-foreground"
+              : "text-muted-foreground hover:bg-interactive-hover hover:text-foreground"
+          )}
         >
           <BookOpen className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
           <span>使用说明</span>
@@ -1564,7 +1568,6 @@ export default function WorkspacePage() {
                 setSelectedSchoolId(null);
                 setSelectedProgramId(null);
                 setActiveView("background");
-                setBuddyWelcomeDemoOpen(false);
                 opts.onPick?.();
               }}
             >
@@ -1577,7 +1580,6 @@ export default function WorkspacePage() {
                 setSelectedSchoolId(null);
                 setSelectedProgramId(null);
                 setActiveView("dashboard");
-                setBuddyWelcomeDemoOpen(false);
                 opts.onPick?.();
               }}
             >
@@ -1598,11 +1600,11 @@ export default function WorkspacePage() {
             </DropdownMenuLabel>
             <DropdownMenuItem
               onClick={() => {
-                openBuddyWelcomeDemo();
+                openWorkspaceSpotlightReplay();
                 opts.onPick?.();
               }}
             >
-              主页 · 申请助手引导
+              主页 · 工作台引导（重播）
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => {
@@ -1610,7 +1612,6 @@ export default function WorkspacePage() {
                 setSelectedSchoolId(null);
                 setSelectedProgramId(null);
                 setActiveView("dashboard");
-                setBuddyWelcomeDemoOpen(false);
                 opts.onPick?.();
               }}
             >
@@ -1622,7 +1623,6 @@ export default function WorkspacePage() {
                 setSelectedSchoolId(null);
                 setSelectedProgramId(null);
                 setActiveView("dashboard");
-                setBuddyWelcomeDemoOpen(false);
                 opts.onPick?.();
                 window.setTimeout(() => jumpToApplicationList(), 120);
               }}
@@ -1646,7 +1646,6 @@ export default function WorkspacePage() {
                 if (!id) return;
                 selectSchool(id);
                 setActiveView("dashboard");
-                setBuddyWelcomeDemoOpen(false);
                 opts.onPick?.();
               }}
             >
@@ -1666,7 +1665,6 @@ export default function WorkspacePage() {
                 if (!p) return;
                 openProgramDetail(p);
                 setActiveView("dashboard");
-                setBuddyWelcomeDemoOpen(false);
                 opts.onPick?.();
               }}
             >
@@ -1682,7 +1680,6 @@ export default function WorkspacePage() {
               onClick={() => {
                 const pid = addedProgramIds[0];
                 if (!pid) return;
-                setBuddyWelcomeDemoOpen(false);
                 opts.onPick?.();
                 router.push(`/workspace/write/${pid}`);
               }}
@@ -1760,7 +1757,9 @@ export default function WorkspacePage() {
                   ? `${selectedSchool.name} · ${displayPrograms.length} 项`
                   : activeView === "background"
                     ? "我的背景"
-                    : "主页"}
+                    : activeView === "usageGuide"
+                      ? "使用说明"
+                      : "主页"}
               </p>
             </div>
             <Link href="/" className="shrink-0">
@@ -2086,6 +2085,7 @@ export default function WorkspacePage() {
                           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-8 xl:grid-cols-3">
                             {visibleSelectedProgramDraftSheets.map((sheet) => (
                               <Link
+                                prefetch={false}
                                 key={`${sheet.programId}-${sheet.kind}`}
                                 href={`/workspace/write/${sheet.programId}`}
                                 className={cn(
@@ -2215,10 +2215,7 @@ export default function WorkspacePage() {
                     data-tour="workspace-buddy-anchor"
                     className="flex justify-start scroll-mt-24"
                   >
-                    <WorkspaceBuddy
-                      welcomeDemoOpen={buddyWelcomeDemoOpen}
-                      onWelcomeDemoDismiss={() => setBuddyWelcomeDemoOpen(false)}
-                    />
+                    <WorkspaceBuddy />
                   </div>
                   {addedPrograms.length > 0 ? (
                     <div
@@ -2655,6 +2652,106 @@ export default function WorkspacePage() {
                 </section>
               )}
 
+              {!selectedSchool && !selectedProgramPair && activeView === "usageGuide" && (
+                <section className="space-y-6" aria-label="使用说明">
+                  <header className="space-y-1 border-b border-border pb-4 text-left">
+                    <h1 className="text-lg font-semibold tracking-tight text-foreground">EduMatch 使用说明</h1>
+                    <p className="text-sm text-muted-foreground">
+                      产品定位、数据来源、团队背景与工作台操作
+                    </p>
+                  </header>
+                  <div className="space-y-5 text-sm leading-relaxed text-muted-foreground">
+                    <section>
+                      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground/80">
+                        产品定位
+                      </h2>
+                      <p>
+                        EduMatch 是<strong className="font-medium text-foreground">演示型</strong>
+                        留学匹配产品，把「问卷 → 匹配结果 → 申请工作台 → 文书草稿」串成可走完的闭环，便于展示流程与做用户访谈；当前版本
+                        <strong className="font-medium text-foreground">不替代</strong>
+                        院校官方招生系统，也不提供真实录取预测。
+                      </p>
+                    </section>
+
+                    <section>
+                      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground/80">
+                        数据来源
+                      </h2>
+                      <ul className="list-inside list-disc space-y-2">
+                        <li>
+                          <span className="font-medium text-foreground">院校与项目</span>：内置演示数据集（约 8
+                          所院校、12–15 个项目），含排名、学制、学费、简介、课程说明等字段；与问卷字段由
+                          <strong className="font-medium text-foreground">本地规则</strong>
+                          组合生成匹配列表与「匹配说明」文案，非实时同步任一官方数据库。
+                        </li>
+                        <li>
+                          <span className="font-medium text-foreground">地图</span>：底图使用
+                          <a
+                            href="https://www.openstreetmap.org/copyright"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground"
+                          >
+                            OpenStreetMap
+                          </a>
+                          公开瓦片；各校坐标为 WGS84
+                          <strong className="font-medium text-foreground">主校区近似点</strong>
+                          ，仅作分布示意，不表示精确校园范围。
+                        </li>
+                        <li>
+                          <span className="font-medium text-foreground">学校介绍文案</span>：工作台单校视图中的校园风格、城市与生活描述等，为产品侧编写的
+                          <strong className="font-medium text-foreground">说明性内容</strong>
+                          ，用于 Demo 信息层级，不代表该校官方表述。
+                        </li>
+                      </ul>
+                    </section>
+
+                    <section>
+                      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground/80">
+                        数据与隐私
+                      </h2>
+                      <p>
+                        问卷、匹配结果、申请单、申请状态与文书草稿均保存在本机浏览器
+                        <strong className="font-medium text-foreground">localStorage</strong>
+                        ，不上传服务器、不登录账号；清除站点数据或更换设备后内容不会跟随。请勿将本 Demo
+                        当作云端备份工具。
+                      </p>
+                    </section>
+
+                    <section>
+                      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground/80">
+                        团队与背景
+                      </h2>
+                      <p>
+                        本项目在 <strong className="font-medium text-foreground">BuddyUp</strong>{" "}
+                        产品脉络下协作推进：由产品与工程同学负责交互、前端实现与演示数据编排，并参考服务设计、认知负荷与长表单体验等常见设计原则做迭代（内部设计笔记见仓库中的理论基础整理）。当前阶段聚焦
+                        <strong className="font-medium text-foreground">可演示、可讨论</strong>
+                        的端到端体验，而非商业录取服务。
+                      </p>
+                      <p className="mt-2 text-xs text-muted-foreground/90">
+                        选校与投递决策请以目标院校官网、院系说明与正规顾问渠道为准；本产品中任何匹配排序与文案均不构成申请建议或承诺。
+                      </p>
+                    </section>
+
+                    <section>
+                      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground/80">
+                        工作台操作
+                      </h2>
+                      <ul className="list-inside list-disc space-y-2">
+                        <li>
+                          左侧「浏览」中点击搜索或按 ⌘K（Windows 为 Ctrl+K）打开命令面板，过滤并跳转到主页、学校、项目或文书；主区列表会随搜索关键字同步筛选。
+                        </li>
+                        <li>「主页」主区包含指标卡片与快速入口；列表在下方。</li>
+                        <li>
+                          申请列表按冲刺 / 主申 / 保底分组，宽屏下三列紧凑卡片；同档内可拖动排序。列表中可改申请状态；「写文书」进入草稿编辑，草稿保存在本机浏览器。
+                        </li>
+                        <li>侧栏「文书」汇总有内容的草稿；返回本页或切换窗口后会自动刷新状态。</li>
+                      </ul>
+                    </section>
+                  </div>
+                </section>
+              )}
+
               {selectedSchool && !selectedProgramPair && (
                 <div className="mb-6 space-y-3">
                   <div className="rounded-lg border border-border bg-card px-4 py-3">
@@ -2835,6 +2932,19 @@ export default function WorkspacePage() {
                   <span className="font-medium">我的背景</span>
                   <span className="ml-1 truncate text-xs text-muted-foreground">问卷与经历摘要</span>
                 </CommandItem>
+                <CommandItem
+                  value="使用说明 帮助 指南 guide about"
+                  onSelect={() => {
+                    finishWorkspaceCommand();
+                    clearWorkspaceTestPreviews();
+                    openUsageGuide();
+                    setLiveMessage("已打开使用说明");
+                  }}
+                >
+                  <BookOpen className="h-4 w-4" />
+                  <span className="font-medium">使用说明</span>
+                  <span className="ml-1 truncate text-xs text-muted-foreground">产品说明与工作台操作</span>
+                </CommandItem>
               </CommandGroup>
               {schoolsInWorkspace.length > 0 ? (
                 <CommandGroup heading="学校">
@@ -2938,7 +3048,7 @@ export default function WorkspacePage() {
         <DialogContent className="sm:max-w-[640px]">
           <DialogHeader>
             <DialogTitle>添加项目</DialogTitle>
-            <DialogDescription>搜索并加入工作台项目列表</DialogDescription>
+            <DialogDescription>搜索并加入项目清单</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <Input
@@ -2950,7 +3060,7 @@ export default function WorkspacePage() {
               <div className="p-2">
                 {filteredAddablePrograms.length === 0 ? (
                   <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-                    {addablePrograms.length === 0 ? "所有项目都已在工作台中" : "没有匹配到可添加项目"}
+                    {addablePrograms.length === 0 ? "所有项目都已在项目清单中" : "没有匹配到可添加项目"}
                   </p>
                 ) : (
                   <div className="space-y-1">
@@ -3046,7 +3156,7 @@ export default function WorkspacePage() {
                                   addProgramToWorkspace(program);
                                 }}
                               >
-                                添加到工作台
+                                添加到项目清单
                               </Button>
                             </div>
                           </div>
@@ -3204,107 +3314,6 @@ export default function WorkspacePage() {
               {pendingRemoveSchoolId ? "确认移除院校" : "确认移除"}
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={usageGuideOpen} onOpenChange={setUsageGuideOpen}>
-        <DialogContent className="flex max-h-[min(88vh,720px)] max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
-          <DialogHeader className="shrink-0 space-y-1 border-b border-border px-6 py-4 pr-12 text-left">
-            <DialogTitle className="text-lg">EduMatch 使用说明</DialogTitle>
-            <p className="text-sm font-normal text-muted-foreground">
-              产品定位、数据来源、团队背景与工作台操作
-            </p>
-          </DialogHeader>
-          <ScrollArea className="min-h-0 flex-1 max-h-[min(58vh,480px)] sm:max-h-[min(62vh,520px)]">
-            <div className="space-y-5 px-6 py-4 pr-4 text-sm leading-relaxed text-muted-foreground">
-              <section>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground/80">
-                  产品定位
-                </h3>
-                <p>
-                  EduMatch 是<strong className="font-medium text-foreground">演示型</strong>
-                  留学匹配产品，把「问卷 → 匹配结果 → 申请工作台 → 文书草稿」串成可走完的闭环，便于展示流程与做用户访谈；当前版本<strong className="font-medium text-foreground">不替代</strong>
-                  院校官方招生系统，也不提供真实录取预测。
-                </p>
-              </section>
-
-              <section>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground/80">
-                  数据来源
-                </h3>
-                <ul className="list-inside list-disc space-y-2">
-                  <li>
-                    <span className="font-medium text-foreground">院校与项目</span>：内置演示数据集（约 8
-                    所院校、12–15 个项目），含排名、学制、学费、简介、课程说明等字段；与问卷字段由
-                    <strong className="font-medium text-foreground">本地规则</strong>
-                    组合生成匹配列表与「匹配说明」文案，非实时同步任一官方数据库。
-                  </li>
-                  <li>
-                    <span className="font-medium text-foreground">地图</span>：底图使用
-                    <a
-                      href="https://www.openstreetmap.org/copyright"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground"
-                    >
-                      OpenStreetMap
-                    </a>
-                    公开瓦片；各校坐标为 WGS84
-                    <strong className="font-medium text-foreground">主校区近似点</strong>
-                    ，仅作分布示意，不表示精确校园范围。
-                  </li>
-                  <li>
-                    <span className="font-medium text-foreground">学校介绍文案</span>：工作台单校视图中的校园风格、城市与生活描述等，为产品侧编写的
-                    <strong className="font-medium text-foreground">说明性内容</strong>
-                    ，用于 Demo 信息层级，不代表该校官方表述。
-                  </li>
-                </ul>
-              </section>
-
-              <section>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground/80">
-                  数据与隐私
-                </h3>
-                <p>
-                  问卷、匹配结果、申请单、申请状态与文书草稿均保存在本机浏览器
-                  <strong className="font-medium text-foreground">localStorage</strong>
-                  ，不上传服务器、不登录账号；清除站点数据或更换设备后内容不会跟随。请勿将本 Demo
-                  当作云端备份工具。
-                </p>
-              </section>
-
-              <section>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground/80">
-                  团队与背景
-                </h3>
-                <p>
-                  本项目在 <strong className="font-medium text-foreground">BuddyUp</strong>{" "}
-                  产品脉络下协作推进：由产品与工程同学负责交互、前端实现与演示数据编排，并参考服务设计、认知负荷与长表单体验等常见设计原则做迭代（内部设计笔记见仓库中的理论基础整理）。当前阶段聚焦
-                  <strong className="font-medium text-foreground">可演示、可讨论</strong>
-                  的端到端体验，而非商业录取服务。
-                </p>
-                <p className="mt-2 text-xs text-muted-foreground/90">
-                  选校与投递决策请以目标院校官网、院系说明与正规顾问渠道为准；本产品中任何匹配排序与文案均不构成申请建议或承诺。
-                </p>
-              </section>
-
-              <section>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground/80">
-                  工作台操作
-                </h3>
-                <ul className="list-inside list-disc space-y-2">
-                  <li>
-                    左侧「浏览」中点击搜索或按 ⌘K（Windows 为 Ctrl+K）打开命令面板，过滤并跳转到主页、学校、项目或文书；主区列表会随搜索关键字同步筛选。
-                  </li>
-                  <li>「主页」主区包含指标卡片与快速入口；列表在下方。</li>
-                  <li>
-                    申请列表按冲刺 / 主申 / 保底分组，宽屏下三列紧凑卡片；同档内可拖动排序。列表中可改申请状态；「写文书」进入草稿编辑，草稿保存在本机浏览器。
-                  </li>
-                  <li>侧栏「文书」汇总有内容的草稿；返回本页或切换窗口后会自动刷新状态。</li>
-                </ul>
-              </section>
-            </div>
-          </ScrollArea>
         </DialogContent>
       </Dialog>
 

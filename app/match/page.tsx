@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ArrowLeft, ArrowRight, RefreshCw, ChevronRight, LayoutGrid } from "lucide-react";
@@ -74,6 +75,7 @@ function buildAnalysisSteps(data: QuestionnaireData): AnalysisStep[] {
 }
 
 export default function MatchPage() {
+  const router = useRouter();
   const {
     data: questionnaireData,
     isLoaded: isQuestionnaireLoaded,
@@ -165,6 +167,7 @@ export default function MatchPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!result || isGenerating) return;
+    if (new URLSearchParams(window.location.search).get("replaySpotlight") === "1") return;
     try {
       if (window.localStorage.getItem(ONBOARDING_MATCH_SPOTLIGHT_V1)) return;
     } catch {
@@ -173,6 +176,24 @@ export default function MatchPage() {
     const id = window.requestAnimationFrame(() => setMatchSpotlightOpen(true));
     return () => window.cancelAnimationFrame(id);
   }, [result, isGenerating]);
+
+  /** 全局「测试」菜单：`/match?replaySpotlight=1` 重播匹配页气泡引导 */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!result || isGenerating) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("replaySpotlight") !== "1") return;
+    try {
+      window.localStorage.removeItem(ONBOARDING_MATCH_SPOTLIGHT_V1);
+    } catch {
+      /* ignore */
+    }
+    params.delete("replaySpotlight");
+    const qs = params.toString();
+    router.replace(`/match${qs ? `?${qs}` : ""}`, { scroll: false });
+    const id = window.requestAnimationFrame(() => setMatchSpotlightOpen(true));
+    return () => window.cancelAnimationFrame(id);
+  }, [result, isGenerating, router]);
 
   const handleAddProgram = (programId: string) => {
     persistAddedPrograms([...addedPrograms, programId]);
@@ -257,8 +278,8 @@ export default function MatchPage() {
     if (filteredPrograms.length > 0) {
       steps.push({
         targetSelector: '[data-tour="match-program-add"]',
-        title: "加入申请清单",
-        description: "在单张卡片上点击「+」加入工作台；已加入时同一位置可取消。加入后可在工作台管理文书与状态。",
+        title: "加入项目清单",
+        description: "在单张卡片上点击「+」添加到项目清单；已加入时同一位置可取消。加入后可在工作台管理文书与状态。",
       });
     }
     steps.push({

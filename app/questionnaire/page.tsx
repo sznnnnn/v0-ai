@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Paperclip, X } from "lucide-react";
 import { GuestBanner } from "@/components/questionnaire/guest-banner";
+import { QuestionnaireBuddy } from "@/components/questionnaire/questionnaire-buddy";
 import { FileUpload } from "@/components/questionnaire/file-upload";
 import { PersonalInfoForm } from "@/components/questionnaire/steps/personal-info";
 import { TargetPreferencesForm } from "@/components/questionnaire/steps/target-preferences";
@@ -211,35 +212,38 @@ export default function QuestionnairePage() {
 
   if (!hasEnteredQuestionnaire) {
     return (
-      <div className="ui-page-shell flex items-center justify-center px-6">
-        <div className="w-full max-w-xl rounded-2xl border border-border/80 bg-card/95 p-8 shadow-sm">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            你好，怎么称呼你？
-          </h1>
-          <div className="mt-6 flex items-center gap-2">
-            <input
-              type="text"
-              value={introName}
-              onChange={(e) => setIntroName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleEnterQuestionnaire();
-                }
-              }}
-              placeholder="你的称呼"
-              autoFocus
-              className="h-12 w-full rounded-lg border border-border bg-background px-4 text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-foreground/40"
-            />
-            <Button
-              type="button"
-              onClick={handleEnterQuestionnaire}
-              disabled={!introName.trim()}
-              className="h-12 min-w-12 px-0 text-lg"
-              aria-label="进入下一题"
-            >
-              {">"}
-            </Button>
+      <div className="ui-page-shell flex min-h-[100dvh] items-center justify-center px-4 py-8 sm:px-6">
+        <div className="w-full max-w-lg">
+          <div className="rounded-2xl border border-border/80 bg-card/95 p-5 shadow-sm sm:p-8">
+            <QuestionnaireBuddy mode="intro" className="border-b border-border/70 pb-5 sm:pb-6" />
+            <h1 className="mt-5 text-xl font-semibold tracking-tight text-foreground sm:mt-6 sm:text-2xl">
+              你好，怎么称呼你？
+            </h1>
+            <div className="mt-4 flex min-w-0 items-center gap-2 sm:mt-5">
+              <input
+                type="text"
+                value={introName}
+                onChange={(e) => setIntroName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleEnterQuestionnaire();
+                  }
+                }}
+                placeholder="你的称呼"
+                autoFocus
+                className="h-12 min-w-0 flex-1 rounded-lg border border-border bg-background px-4 text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-foreground/40"
+              />
+              <Button
+                type="button"
+                onClick={handleEnterQuestionnaire}
+                disabled={!introName.trim()}
+                className="h-12 min-w-11 shrink-0 px-0 text-lg sm:min-w-12"
+                aria-label="进入下一题"
+              >
+                {">"}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -270,57 +274,61 @@ export default function QuestionnairePage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-8">
-        <div className="mb-6">
-          <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-            <span>完成度</span>
-            <span>{progress}%</span>
-          </div>
-          <div className="h-1.5 rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-foreground/80 transition-all duration-300"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        </div>
-        <p className="mb-4 text-base text-muted-foreground">
-          {data.personalInfo.fullName.trim()
-            ? `${data.personalInfo.fullName.trim()}，补充一下背景信息`
-            : "补充一下背景信息"}
-        </p>
-
-        {showUploadPanel && (
-          <div className="mb-6 rounded-xl border border-border/80 bg-card/90 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-medium text-foreground">上传材料</p>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => setShowUploadPanel(false)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
+      <main className="mx-auto max-w-6xl px-6 py-8 pb-28">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(200px,260px)_minmax(0,1fr)] lg:gap-x-8 lg:items-start">
+          <div className="col-span-full">
+            <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+              <span>完成度</span>
+              <span>{progress}%</span>
             </div>
-            <FileUpload files={data.files} onFilesChange={(files) => updateData("files", files)} />
+            <div className="h-1.5 rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-foreground/80 transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
           </div>
-        )}
 
-        <div>
-          <div className="min-h-[min(70vh,520px)] pr-1">
-            <section
-              key={currentStep}
-              className="rounded-xl border border-border/80 bg-card/95 p-8"
-            >
-              {stepForm}
-            </section>
+          <QuestionnaireBuddy
+            mode="questionnaire"
+            currentStep={currentStep}
+            displayName={data.personalInfo.fullName}
+            className="lg:sticky lg:top-[5.5rem] lg:self-start"
+          />
+
+          <div className="min-w-0 space-y-6">
+            {showUploadPanel && (
+              <div className="rounded-xl border border-border/80 bg-card/90 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-sm font-medium text-foreground">上传材料</p>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => setShowUploadPanel(false)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                <FileUpload files={data.files} onFilesChange={(files) => updateData("files", files)} />
+              </div>
+            )}
+
+            <div className="min-h-[min(70vh,520px)] pr-1">
+              <section
+                key={currentStep}
+                className="rounded-xl border border-border/80 bg-card/95 p-8"
+              >
+                {stepForm}
+              </section>
+            </div>
+
+            <p className="text-center text-xs text-muted-foreground/70">已自动保存</p>
+            {navigationHint && (
+              <p className="text-center text-xs text-amber-600">{navigationHint}</p>
+            )}
           </div>
         </div>
-
-        <p className="mt-6 text-center text-xs text-muted-foreground/70">已自动保存</p>
-        {navigationHint && (
-          <p className="mt-2 text-center text-xs text-amber-600">{navigationHint}</p>
-        )}
       </main>
 
       <div className="sticky bottom-0 z-30 border-t border-border bg-background/85 px-6 py-3 backdrop-blur">

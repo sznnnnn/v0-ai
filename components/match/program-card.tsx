@@ -34,7 +34,7 @@ interface ProgramCardProps {
   showSchoolInHeader?: boolean;
   showSelectionAction?: boolean;
   onCardClick?: () => void;
-  /** 为气泡蒙层引导标记「添加到工作台」按钮 */
+  /** 为气泡蒙层引导标记「添加到项目清单」按钮 */
   tourAddTarget?: boolean;
 }
 
@@ -134,7 +134,7 @@ export function ProgramCard({
                           className="h-8 w-8 shrink-0 rounded-md border border-black bg-black text-white hover:bg-black/90"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (!confirm("确认从工作台移除该项目吗？")) {
+                            if (!confirm("确认从项目清单移除该项目吗？")) {
                               return;
                             }
                             onRemove?.();
@@ -158,12 +158,12 @@ export function ProgramCard({
                             e.stopPropagation();
                             onAdd?.();
                           }}
-                          aria-label="添加到工作台"
+                          aria-label="添加到项目清单"
                         >
                           <Plus className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent side="top">添加到工作台</TooltipContent>
+                      <TooltipContent side="top">添加到项目清单</TooltipContent>
                     </Tooltip>
                   )}
                 </div>
