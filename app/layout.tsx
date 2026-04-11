@@ -1,14 +1,16 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import { GlobalTestMenu } from '@/components/global-test-menu'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'EduMatch - AI智能留学申请平台',
-  description: 'AI驱动的智能留学申请匹配平台，帮助你找到最适合的学校和项目',
+  title: 'BuddyUp - AI 驱动的个人陈述生成工具 | 内测中',
+  description:
+    'BuddyUp 内测中 - 基于大语言模型的 AI 个人陈述生成器，快速生成、编辑和管理多版本 PS，数据本地存储，保护隐私。本站含问卷·匹配·工作台可交互 Demo。',
   generator: 'v0.app',
   icons: {
     icon: [
@@ -38,6 +40,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="font-sans antialiased">
         {children}
+        <GlobalTestMenu />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

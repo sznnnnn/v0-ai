@@ -34,6 +34,8 @@ interface ProgramCardProps {
   showSchoolInHeader?: boolean;
   showSelectionAction?: boolean;
   onCardClick?: () => void;
+  /** 为气泡蒙层引导标记「添加到工作台」按钮 */
+  tourAddTarget?: boolean;
 }
 
 export function ProgramCard({
@@ -45,6 +47,7 @@ export function ProgramCard({
   showSchoolInHeader = true,
   showSelectionAction = true,
   onCardClick,
+  tourAddTarget = false,
 }: ProgramCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const deadlineShort = program.deadline.split("-").slice(1).join("/");
@@ -117,48 +120,54 @@ export function ProgramCard({
                   )}
                 />
               )}
-              {showSelectionAction &&
-                (isAdded ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        size="icon"
-                        className="h-8 w-8 shrink-0 rounded-md border border-black bg-black text-white hover:bg-black/90"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (!confirm("确认从工作台移除该项目吗？")) {
-                            return;
-                          }
-                          onRemove?.();
-                        }}
-                        aria-label="取消添加"
-                      >
-                        <Check className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">取消添加</TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8 shrink-0 rounded-md border-border/80 bg-background"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onAdd?.();
-                        }}
-                        aria-label="添加到工作台"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">添加到工作台</TooltipContent>
-                  </Tooltip>
-                ))}
+              {showSelectionAction && (
+                <div
+                  className="flex shrink-0 items-start justify-end"
+                  data-tour={tourAddTarget ? "match-program-add" : undefined}
+                >
+                  {isAdded ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          size="icon"
+                          className="h-8 w-8 shrink-0 rounded-md border border-black bg-black text-white hover:bg-black/90"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!confirm("确认从工作台移除该项目吗？")) {
+                              return;
+                            }
+                            onRemove?.();
+                          }}
+                          aria-label="取消添加"
+                        >
+                          <Check className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">取消添加</TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 shrink-0 rounded-md border-border/80 bg-background"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAdd?.();
+                          }}
+                          aria-label="添加到工作台"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">添加到工作台</TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

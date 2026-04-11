@@ -27,7 +27,7 @@
 1. 端到端主流程总览（用户路径）
 --------------------------------------------------
 主路径：
-首页（/） -> 问卷（/questionnaire） -> 匹配（/match） -> 工作台（/workspace） -> 文书编辑（/workspace/write/[programId]）
+落地页（/） -> 问卷（/questionnaire） -> 匹配（/match） -> 工作台（/workspace） -> 文书编辑（/workspace/write/[programId]）
 
 用户可反复回跳：
 - 匹配页可返回问卷补充信息后重匹配。

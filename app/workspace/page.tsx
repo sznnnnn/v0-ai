@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, type ReactNode } from "react";
+import { useState, useEffect, useMemo, useCallback, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -85,8 +87,10 @@ import { WorkspaceBuddy } from "@/components/workspace/workspace-buddy";
 import { WorkspaceApplicationsMap } from "@/components/workspace/workspace-applications-map";
 import type { WorkspaceMapPin } from "@/components/workspace/workspace-applications-map";
 import { useMatchResult, useQuestionnaire } from "@/hooks/use-questionnaire";
-import type { Program, QuestionnaireData, School } from "@/lib/types";
+import { initialQuestionnaireData, type Program, type QuestionnaireData, type School } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { BubbleSpotlightTour, type BubbleSpotlightStep } from "@/components/onboarding/bubble-spotlight-tour";
+import { ONBOARDING_WORKSPACE_SPOTLIGHT_V1 } from "@/lib/onboarding-keys";
 import {
   clearProgramDrafts,
   DOCUMENT_DRAFT_LABELS,
@@ -411,7 +415,8 @@ function SortableWorkspaceApplicationCard({
 export default function WorkspacePage() {
   const router = useRouter();
   const { result } = useMatchResult();
-  const { data: questionnaireData, saveData } = useQuestionnaire();
+  const { data: questionnaireData, saveData, getCompletionStatus, isLoaded: questionnaireLoaded } =
+    useQuestionnaire();
   const [addedProgramIds, setAddedProgramIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [workspaceCommandOpen, setWorkspaceCommandOpen] = useState(false);
@@ -428,6 +433,11 @@ export default function WorkspacePage() {
   const [draftStorageReady, setDraftStorageReady] = useState(false);
   const [showAllProgramDrafts, setShowAllProgramDrafts] = useState(false);
   const [usageGuideOpen, setUsageGuideOpen] = useState(false);
+  const [buddyWelcomeDemoOpen, setBuddyWelcomeDemoOpen] = useState(false);
+  /** 测试菜单：预览「问卷几乎未填」时的我的背景，不写入 localStorage */
+  const [testQuestionnairePreview, setTestQuestionnairePreview] = useState<QuestionnaireData | null>(null);
+  /** 测试菜单：预览「尚未添加项目」时的主页空状态，不改动已加项目数据 */
+  const [testDashboardEmptyPreview, setTestDashboardEmptyPreview] = useState(false);
   const [addProgramDialogOpen, setAddProgramDialogOpen] = useState(false);
   const [addProgramQuery, setAddProgramQuery] = useState("");
   const [expandedAddProgramId, setExpandedAddProgramId] = useState<string | null>(null);
@@ -439,12 +449,22 @@ export default function WorkspacePage() {
   const [pendingWriteProgramId, setPendingWriteProgramId] = useState<string | null>(null);
   const [writeChoiceMode, setWriteChoiceMode] = useState<"existing" | "create">("create");
   const [liveMessage, setLiveMessage] = useState("");
+  const [desktopSpotlightOk, setDesktopSpotlightOk] = useState(false);
+  const [workspaceSpotlightOpen, setWorkspaceSpotlightOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState({
     overview: false,
     orientation: false,
     highlights: false,
     curriculum: false,
   });
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const sync = () => setDesktopSpotlightOk(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
 
   useEffect(() => {
     setDraftStorageReady(true);
@@ -462,6 +482,32 @@ export default function WorkspacePage() {
   useEffect(() => {
     setShowAllProgramDrafts(false);
   }, [selectedProgramId]);
+
+  const clearWorkspaceTestPreviews = useCallback(() => {
+    setTestQuestionnairePreview(null);
+    setTestDashboardEmptyPreview(false);
+  }, []);
+
+  const openBuddyWelcomeDemo = useCallback(() => {
+    clearWorkspaceTestPreviews();
+    setActiveView("dashboard");
+    setSelectedSchoolId(null);
+    setSelectedProgramId(null);
+    setBuddyWelcomeDemoOpen(true);
+    requestAnimationFrame(() => {
+      document.getElementById("workspace-buddy-anchor")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, [clearWorkspaceTestPreviews]);
+
+  useEffect(() => {
+    if (!buddyWelcomeDemoOpen) return;
+    if (activeView !== "dashboard" || selectedSchoolId || selectedProgramId) {
+      setBuddyWelcomeDemoOpen(false);
+    }
+  }, [buddyWelcomeDemoOpen, activeView, selectedSchoolId, selectedProgramId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -513,14 +559,30 @@ export default function WorkspacePage() {
     });
   }, [selectedProgramId]);
 
+  const backgroundViewData = testQuestionnairePreview ?? questionnaireData;
+  const effectiveAddedProgramIds = testDashboardEmptyPreview ? [] : addedProgramIds;
+
+  const completionStatus = getCompletionStatus();
+  const showBackgroundSupplementReminder =
+    questionnaireLoaded && !testQuestionnairePreview && !completionStatus.canGenerateMatch;
+
+  useEffect(() => {
+    if (testQuestionnairePreview) setIsBackgroundEditing(false);
+  }, [testQuestionnairePreview]);
+
   useEffect(() => {
     if (isBackgroundEditing) return;
+    const source = testQuestionnairePreview ?? questionnaireData;
     setBackgroundDraft({
-      personalInfo: questionnaireData.personalInfo,
-      workExperience: questionnaireData.workExperience,
-      projects: questionnaireData.projects,
+      personalInfo: source.personalInfo,
+      workExperience: source.workExperience,
+      projects: source.projects,
     });
-  }, [isBackgroundEditing, questionnaireData]);
+  }, [isBackgroundEditing, questionnaireData, testQuestionnairePreview]);
+
+  useEffect(() => {
+    if (activeView !== "dashboard") setTestDashboardEmptyPreview(false);
+  }, [activeView]);
 
   const draftSummaries = useMemo(() => {
     if (!draftStorageReady) return [];
@@ -581,7 +643,7 @@ export default function WorkspacePage() {
 
   const addedPrograms = useMemo(() => {
     if (!result) return [];
-    return addedProgramIds
+    return effectiveAddedProgramIds
       .map((id) => {
         const program = result.programs.find((p) => p.id === id);
         const school = result.schools.find((s) => s.id === program?.schoolId);
@@ -589,7 +651,7 @@ export default function WorkspacePage() {
         return { program, school };
       })
       .filter(Boolean) as { program: Program; school: School }[];
-  }, [result, addedProgramIds]);
+  }, [result, effectiveAddedProgramIds]);
 
   const addablePrograms = useMemo(() => {
     if (!result) return [];
@@ -714,6 +776,53 @@ export default function WorkspacePage() {
     }
     return grouped;
   }, [addedPrograms]);
+
+  const workspaceSpotlightSteps = useMemo((): BubbleSpotlightStep[] => {
+    return [
+      {
+        targetSelector: '[data-tour="workspace-sidebar-shell"]',
+        title: "左侧栏",
+        description:
+          "切换主页与我的背景、打开全局搜索（⌘K / Ctrl+K），并按学校展开已选项目；文书草稿入口也在此汇总。",
+      },
+      {
+        targetSelector: "#workspace-application-list",
+        title: "申请列表",
+        description:
+          addedPrograms.length > 0
+            ? "按冲刺 / 主申 / 保底分组展示；可拖动排序、更新申请状态，或进入项目详情与文书编辑。"
+            : "从匹配页加入项目后，列表会出现在这里。若尚未添加，可先返回匹配页勾选项目。",
+        allowMissingTarget: true,
+        padding: 8,
+      },
+      {
+        targetSelector: '[data-tour="workspace-buddy-anchor"]',
+        title: "申请助手",
+        description: "用对话整理待办与材料思路；有项目选中时也会结合当前视图给出提示。",
+        allowMissingTarget: true,
+      },
+    ];
+  }, [addedPrograms.length]);
+
+  useEffect(() => {
+    if (!draftStorageReady || !questionnaireLoaded) return;
+    if (!desktopSpotlightOk) return;
+    if (activeView !== "dashboard" || selectedSchoolId || selectedProgramId) return;
+    try {
+      if (window.localStorage.getItem(ONBOARDING_WORKSPACE_SPOTLIGHT_V1)) return;
+    } catch {
+      return;
+    }
+    const id = window.requestAnimationFrame(() => setWorkspaceSpotlightOpen(true));
+    return () => window.cancelAnimationFrame(id);
+  }, [
+    draftStorageReady,
+    questionnaireLoaded,
+    desktopSpotlightOk,
+    activeView,
+    selectedSchoolId,
+    selectedProgramId,
+  ]);
 
   const selectedSchool = useMemo(() => {
     if (!selectedSchoolId) return null;
@@ -926,6 +1035,7 @@ export default function WorkspacePage() {
 
   const addProgramToWorkspace = (program: Program) => {
     if (addedProgramIds.includes(program.id)) return;
+    setTestDashboardEmptyPreview(false);
     const updated = [...addedProgramIds, program.id];
     setAddedProgramIds(updated);
     localStorage.setItem("edumatch_added_programs", JSON.stringify(updated));
@@ -1030,6 +1140,87 @@ export default function WorkspacePage() {
     setActiveView("background");
   };
 
+  /** 全局「测试」菜单通过 ?test= 深链进入工作台时执行对应动作 */
+  useEffect(() => {
+    if (!draftStorageReady) return;
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const test = params.get("test");
+    if (!test) return;
+
+    const needsResult = test === "school" || test === "program" || test === "write";
+    if (needsResult && !result) return;
+
+    params.delete("test");
+    const qs = params.toString();
+    const path = window.location.pathname;
+    router.replace(`${path}${qs ? `?${qs}` : ""}`, { scroll: false });
+
+    const run = () => {
+      switch (test) {
+        case "buddy":
+          openBuddyWelcomeDemo();
+          break;
+        case "home":
+          setSelectedSchoolId(null);
+          setSelectedProgramId(null);
+          setActiveView("dashboard");
+          setBuddyWelcomeDemoOpen(false);
+          break;
+        case "applications":
+          setSelectedSchoolId(null);
+          setSelectedProgramId(null);
+          setActiveView("dashboard");
+          setBuddyWelcomeDemoOpen(false);
+          window.setTimeout(() => jumpToApplicationList(), 120);
+          break;
+        case "background":
+          clearWorkspaceTestPreviews();
+          openBackgroundSummary();
+          break;
+        case "school": {
+          const id = schoolsInWorkspace[0]?.id;
+          if (id) {
+            selectSchool(id);
+            setActiveView("dashboard");
+            setBuddyWelcomeDemoOpen(false);
+          }
+          break;
+        }
+        case "program": {
+          const p = addedPrograms[0]?.program;
+          if (p) {
+            openProgramDetail(p);
+            setActiveView("dashboard");
+            setBuddyWelcomeDemoOpen(false);
+          }
+          break;
+        }
+        case "write": {
+          const pid = addedProgramIds[0];
+          if (pid) {
+            setBuddyWelcomeDemoOpen(false);
+            router.push(`/workspace/write/${pid}`);
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    };
+
+    requestAnimationFrame(run);
+  }, [
+    draftStorageReady,
+    result,
+    router,
+    openBuddyWelcomeDemo,
+    clearWorkspaceTestPreviews,
+    addedPrograms,
+    addedProgramIds,
+    schoolsInWorkspace,
+  ]);
+
   const finishWorkspaceCommand = () => {
     setWorkspaceCommandOpen(false);
     setMobileSidebarOpen(false);
@@ -1081,14 +1272,16 @@ export default function WorkspacePage() {
 
   const cancelBackgroundEdit = () => {
     setIsBackgroundEditing(false);
+    const source = testQuestionnairePreview ?? questionnaireData;
     setBackgroundDraft({
-      personalInfo: questionnaireData.personalInfo,
-      workExperience: questionnaireData.workExperience,
-      projects: questionnaireData.projects,
+      personalInfo: source.personalInfo,
+      workExperience: source.workExperience,
+      projects: source.projects,
     });
   };
 
   const saveBackgroundEdit = () => {
+    if (testQuestionnairePreview) return;
     if (!backgroundDraft) return;
     saveData({
       personalInfo: backgroundDraft.personalInfo,
@@ -1127,6 +1320,7 @@ export default function WorkspacePage() {
           <button
             type="button"
             onClick={() => {
+              clearWorkspaceTestPreviews();
               setSelectedSchoolId(null);
               setSelectedProgramId(null);
               setActiveView("dashboard");
@@ -1153,6 +1347,7 @@ export default function WorkspacePage() {
           <button
             type="button"
             onClick={() => {
+              clearWorkspaceTestPreviews();
               opts.onPick?.();
               openBackgroundSummary();
             }}
@@ -1344,14 +1539,186 @@ export default function WorkspacePage() {
           <MessageSquare className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
           <span>用户反馈</span>
         </a>
-        <Link
-          href="/"
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors duration-150 ease-in-out hover:bg-interactive-hover hover:text-foreground"
-          onClick={() => opts.onPick?.()}
-        >
-          <Sparkles className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-          <span>测试</span>
-        </Link>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors duration-150 ease-in-out hover:bg-interactive-hover hover:text-foreground data-[state=open]:bg-interactive-hover data-[state=open]:text-foreground"
+              aria-label="测试：跳转界面与演示"
+            >
+              <Sparkles className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+              <span>测试</span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="start" className="max-h-[min(70vh,480px)] w-[min(calc(100vw-2rem),17.5rem)] overflow-y-auto">
+            <DropdownMenuLabel className="text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
+              状态预览
+            </DropdownMenuLabel>
+            <DropdownMenuItem
+              onClick={() => {
+                setTestQuestionnairePreview(
+                  structuredClone(initialQuestionnaireData) as QuestionnaireData
+                );
+                setTestDashboardEmptyPreview(false);
+                setIsBackgroundEditing(false);
+                setSelectedSchoolId(null);
+                setSelectedProgramId(null);
+                setActiveView("background");
+                setBuddyWelcomeDemoOpen(false);
+                opts.onPick?.();
+              }}
+            >
+              背景很少 · 我的背景
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                setTestQuestionnairePreview(null);
+                setTestDashboardEmptyPreview(true);
+                setSelectedSchoolId(null);
+                setSelectedProgramId(null);
+                setActiveView("dashboard");
+                setBuddyWelcomeDemoOpen(false);
+                opts.onPick?.();
+              }}
+            >
+              主页 · 无项目空状态
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={!testQuestionnairePreview && !testDashboardEmptyPreview}
+              onClick={() => {
+                clearWorkspaceTestPreviews();
+                opts.onPick?.();
+              }}
+            >
+              清除状态预览
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
+              工作台内
+            </DropdownMenuLabel>
+            <DropdownMenuItem
+              onClick={() => {
+                openBuddyWelcomeDemo();
+                opts.onPick?.();
+              }}
+            >
+              主页 · 申请助手引导
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                clearWorkspaceTestPreviews();
+                setSelectedSchoolId(null);
+                setSelectedProgramId(null);
+                setActiveView("dashboard");
+                setBuddyWelcomeDemoOpen(false);
+                opts.onPick?.();
+              }}
+            >
+              主页
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                clearWorkspaceTestPreviews();
+                setSelectedSchoolId(null);
+                setSelectedProgramId(null);
+                setActiveView("dashboard");
+                setBuddyWelcomeDemoOpen(false);
+                opts.onPick?.();
+                window.setTimeout(() => jumpToApplicationList(), 120);
+              }}
+            >
+              主页 · 申请列表
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                clearWorkspaceTestPreviews();
+                opts.onPick?.();
+                openBackgroundSummary();
+              }}
+            >
+              我的背景
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={schoolsInWorkspace.length === 0}
+              onClick={() => {
+                const id = schoolsInWorkspace[0]?.id;
+                clearWorkspaceTestPreviews();
+                if (!id) return;
+                selectSchool(id);
+                setActiveView("dashboard");
+                setBuddyWelcomeDemoOpen(false);
+                opts.onPick?.();
+              }}
+            >
+              学校视图
+              {schoolsInWorkspace.length > 0 ? (
+                <span className="ml-1 truncate text-muted-foreground">
+                  （{schoolsInWorkspace[0]!.name}）
+                </span>
+              ) : null}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={addedProgramIds.length === 0}
+              onClick={() => {
+                const pid = addedProgramIds[0];
+                const p = pid ? result?.programs.find((x) => x.id === pid) : undefined;
+                clearWorkspaceTestPreviews();
+                if (!p) return;
+                openProgramDetail(p);
+                setActiveView("dashboard");
+                setBuddyWelcomeDemoOpen(false);
+                opts.onPick?.();
+              }}
+            >
+              项目详情
+              {addedProgramIds.length > 0 && result ? (
+                <span className="ml-1 truncate text-muted-foreground">
+                  （{result.programs.find((x) => x.id === addedProgramIds[0])?.nameEn ?? ""}）
+                </span>
+              ) : null}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={addedProgramIds.length === 0}
+              onClick={() => {
+                const pid = addedProgramIds[0];
+                if (!pid) return;
+                setBuddyWelcomeDemoOpen(false);
+                opts.onPick?.();
+                router.push(`/workspace/write/${pid}`);
+              }}
+            >
+              文书编辑（首个项目）
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
+              其他页面
+            </DropdownMenuLabel>
+            <DropdownMenuItem
+              onClick={() => {
+                opts.onPick?.();
+                router.push("/");
+              }}
+            >
+              落地页
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                opts.onPick?.();
+                router.push("/questionnaire");
+              }}
+            >
+              问卷
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                opts.onPick?.();
+                router.push("/match");
+              }}
+            >
+              匹配
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );
@@ -1367,7 +1734,9 @@ export default function WorkspacePage() {
         {/* Desktop sidebar — Notion-like */}
         <aside className="hidden min-h-0 w-[260px] shrink-0 flex-col border-r border-border/80 bg-sidebar md:flex">
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]">
-            <div className="py-3 md:pb-32">{sidebarBody({})}</div>
+            <div className="py-3 md:pb-32" data-tour="workspace-sidebar-shell">
+              {sidebarBody({})}
+            </div>
           </div>
           {sidebarFooter({})}
         </aside>
@@ -1796,8 +2165,60 @@ export default function WorkspacePage() {
                   className="mb-6 space-y-6 md:mb-8 md:space-y-8"
                   aria-label="申请概览 · 主页"
                 >
-                  <div className="flex justify-start">
-                    <WorkspaceBuddy />
+                  {testDashboardEmptyPreview ? (
+                    <div className="rounded-lg border border-sky-300/60 bg-sky-50/90 px-3 py-2.5 text-xs leading-relaxed text-sky-950 dark:border-sky-900/50 dark:bg-sky-950/25 dark:text-sky-100">
+                      <span className="font-medium">状态预览</span>
+                      ：尚未添加项目时的主页与侧栏。本地已加项目未删除。
+                      <button
+                        type="button"
+                        className="ml-2 underline underline-offset-2 hover:text-foreground"
+                        onClick={() => setTestDashboardEmptyPreview(false)}
+                      >
+                        退出预览
+                      </button>
+                    </div>
+                  ) : null}
+                  {showBackgroundSupplementReminder ? (
+                    <div
+                      className="rounded-lg border border-amber-200/90 bg-amber-50/95 px-3 py-3 text-sm text-amber-950 shadow-sm dark:border-amber-900/45 dark:bg-amber-950/30 dark:text-amber-100"
+                      role="status"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                        <p className="min-w-0 leading-relaxed">
+                          <span className="font-medium text-foreground">背景信息还不完整</span>
+                          <span className="text-amber-950/90 dark:text-amber-100/90">
+                            。你已在使用工作台主页；补充问卷中的必填项后，匹配与文书建议会更准确。
+                          </span>
+                        </p>
+                        <div className="flex shrink-0 flex-wrap gap-2">
+                          <Button size="sm" className="h-8" asChild>
+                            <Link href="/questionnaire">去问卷补充</Link>
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 border-amber-300/80 bg-background/80 text-foreground hover:bg-amber-100/80 dark:border-amber-800 dark:hover:bg-amber-950/50"
+                            onClick={() => {
+                              clearWorkspaceTestPreviews();
+                              openBackgroundSummary();
+                            }}
+                          >
+                            查看我的背景
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                  <div
+                    id="workspace-buddy-anchor"
+                    data-tour="workspace-buddy-anchor"
+                    className="flex justify-start scroll-mt-24"
+                  >
+                    <WorkspaceBuddy
+                      welcomeDemoOpen={buddyWelcomeDemoOpen}
+                      onWelcomeDemoDismiss={() => setBuddyWelcomeDemoOpen(false)}
+                    />
                   </div>
                   {addedPrograms.length > 0 ? (
                     <div
@@ -1962,6 +2383,19 @@ export default function WorkspacePage() {
 
               {!selectedSchool && !selectedProgramPair && activeView === "background" && (
                 <section className="space-y-5" aria-label="我的背景">
+                  {testQuestionnairePreview ? (
+                    <div className="rounded-lg border border-amber-300/60 bg-amber-50/90 px-3 py-2.5 text-xs leading-relaxed text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-100">
+                      <span className="font-medium">状态预览</span>
+                      ：问卷几乎未填写时的「我的背景」。本地问卷未修改。
+                      <button
+                        type="button"
+                        className="ml-2 underline underline-offset-2 hover:text-foreground"
+                        onClick={() => setTestQuestionnairePreview(null)}
+                      >
+                        退出预览
+                      </button>
+                    </div>
+                  ) : null}
                   <div className="flex justify-end gap-2">
                     {isBackgroundEditing ? (
                       <>
@@ -1985,7 +2419,11 @@ export default function WorkspacePage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="border-chip-info-text/40 text-chip-info-text hover:bg-chip-info-bg"
+                        disabled={!!testQuestionnairePreview}
+                        title={
+                          testQuestionnairePreview ? "预览模式下请先退出预览再编辑" : undefined
+                        }
+                        className="border-chip-info-text/40 text-chip-info-text hover:bg-chip-info-bg disabled:opacity-60"
                         onClick={() => setIsBackgroundEditing(true)}
                       >
                         编辑
@@ -2010,7 +2448,7 @@ export default function WorkspacePage() {
                               className="h-8 border-border/70 bg-background/80"
                             />
                           ) : (
-                            <p className="font-medium text-foreground">{questionnaireData.personalInfo.fullName || "未填"}</p>
+                            <p className="font-medium text-foreground">{backgroundViewData.personalInfo.fullName || "未填"}</p>
                           )}
                         </div>
                         <div className="space-y-1 border-b border-border/60 pb-2 sm:border-0 sm:pb-0">
@@ -2022,7 +2460,7 @@ export default function WorkspacePage() {
                               className="h-8 border-border/70 bg-background/80"
                             />
                           ) : (
-                            <p className="font-medium text-foreground">{questionnaireData.personalInfo.intendedMajor || "未填"}</p>
+                            <p className="font-medium text-foreground">{backgroundViewData.personalInfo.intendedMajor || "未填"}</p>
                           )}
                         </div>
                         <div className="space-y-1 border-b border-border/60 pb-2 sm:border-0 sm:pb-0">
@@ -2034,7 +2472,7 @@ export default function WorkspacePage() {
                               className="h-8 border-border/70 bg-background/80"
                             />
                           ) : (
-                            <p className="font-medium text-foreground">{questionnaireData.personalInfo.intendedApplicationField || "未填"}</p>
+                            <p className="font-medium text-foreground">{backgroundViewData.personalInfo.intendedApplicationField || "未填"}</p>
                           )}
                         </div>
                         <div className="space-y-1 border-b border-border/60 pb-2 sm:border-0 sm:pb-0">
@@ -2046,7 +2484,7 @@ export default function WorkspacePage() {
                               className="h-8 border-border/70 bg-background/80"
                             />
                           ) : (
-                            <p className="font-medium text-foreground">{questionnaireData.personalInfo.targetSemester || "未填"}</p>
+                            <p className="font-medium text-foreground">{backgroundViewData.personalInfo.targetSemester || "未填"}</p>
                           )}
                         </div>
                         <div className="space-y-1 sm:col-span-2">
@@ -2058,7 +2496,7 @@ export default function WorkspacePage() {
                               className="h-8 border-border/70 bg-background/80"
                             />
                           ) : (
-                            <p className="font-medium text-foreground">{questionnaireData.personalInfo.budgetEstimate || "未填"}</p>
+                            <p className="font-medium text-foreground">{backgroundViewData.personalInfo.budgetEstimate || "未填"}</p>
                           )}
                         </div>
                       </div>
@@ -2073,10 +2511,10 @@ export default function WorkspacePage() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      {(isBackgroundEditing ? backgroundDraft?.workExperience : questionnaireData.workExperience)?.length === 0 ? (
+                      {(isBackgroundEditing ? backgroundDraft?.workExperience : backgroundViewData.workExperience)?.length === 0 ? (
                         <p className="text-sm text-muted-foreground">未填</p>
                       ) : (
-                        (isBackgroundEditing ? backgroundDraft?.workExperience : questionnaireData.workExperience)?.map((work, index) => (
+                        (isBackgroundEditing ? backgroundDraft?.workExperience : backgroundViewData.workExperience)?.map((work, index) => (
                           <article key={work.id} className="ui-card-inset-soft p-3.5">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               {isBackgroundEditing ? (
@@ -2148,10 +2586,10 @@ export default function WorkspacePage() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      {(isBackgroundEditing ? backgroundDraft?.projects : questionnaireData.projects)?.length === 0 ? (
+                      {(isBackgroundEditing ? backgroundDraft?.projects : backgroundViewData.projects)?.length === 0 ? (
                         <p className="text-sm text-muted-foreground">未填</p>
                       ) : (
-                        (isBackgroundEditing ? backgroundDraft?.projects : questionnaireData.projects)?.map((proj, index) => (
+                        (isBackgroundEditing ? backgroundDraft?.projects : backgroundViewData.projects)?.map((proj, index) => (
                           <article key={proj.id} className="ui-card-inset-soft p-3.5">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               {isBackgroundEditing ? (
@@ -2280,7 +2718,11 @@ export default function WorkspacePage() {
                   当前筛选下没有项目，试试清空搜索或切换左侧视图。
                 </div>
               ) : (
-                <div id="workspace-application-list" className="space-y-4 md:space-y-5">
+                <div
+                  id="workspace-application-list"
+                  data-tour="workspace-application-list"
+                  className="space-y-4 md:space-y-5"
+                >
                   {TIER_ORDER.map((tier) => {
                     const row = programsByTier[tier];
                     if (row.length === 0) return null;
@@ -2367,7 +2809,7 @@ export default function WorkspacePage() {
               </CommandEmpty>
               <CommandGroup heading="导航">
                 <CommandItem
-                  value="主页 首页 dashboard home"
+                  value="主页 落地页 landing home"
                   onSelect={() => {
                     finishWorkspaceCommand();
                     setSelectedSchoolId(null);
@@ -2384,6 +2826,7 @@ export default function WorkspacePage() {
                   value="我的背景 背景 简历 questionnaire"
                   onSelect={() => {
                     finishWorkspaceCommand();
+                    clearWorkspaceTestPreviews();
                     openBackgroundSummary();
                     setLiveMessage("已打开我的背景");
                   }}
@@ -2876,6 +3319,14 @@ export default function WorkspacePage() {
           {sidebarFooter({ onPick: () => setMobileSidebarOpen(false) })}
         </SheetContent>
       </Sheet>
+
+      <BubbleSpotlightTour
+        open={workspaceSpotlightOpen}
+        onOpenChange={setWorkspaceSpotlightOpen}
+        steps={workspaceSpotlightSteps}
+        finishStorageKey={ONBOARDING_WORKSPACE_SPOTLIGHT_V1}
+        zIndex={110}
+      />
     </div>
   );
 }

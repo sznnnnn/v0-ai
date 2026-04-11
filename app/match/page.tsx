@@ -15,6 +15,8 @@ import { generateMatchResult } from "@/lib/mock-match";
 import { getDefaultPs } from "@/lib/document-drafts";
 import type { QuestionnaireData, School } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { BubbleSpotlightTour, type BubbleSpotlightStep } from "@/components/onboarding/bubble-spotlight-tour";
+import { ONBOARDING_MATCH_SPOTLIGHT_V1 } from "@/lib/onboarding-keys";
 
 type CategoryFilter = "all" | "reach" | "match" | "safety";
 
@@ -86,6 +88,7 @@ export default function MatchPage() {
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [addedPrograms, setAddedPrograms] = useState<string[]>([]);
   const [defaultPs, setDefaultPs] = useState<string | null>(null);
+  const [matchSpotlightOpen, setMatchSpotlightOpen] = useState(false);
   const generationTimersRef = useRef<number[]>([]);
 
   const persistAddedPrograms = useCallback((ids: string[]) => {
@@ -159,6 +162,18 @@ export default function MatchPage() {
     setDefaultPs(getDefaultPs());
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!result || isGenerating) return;
+    try {
+      if (window.localStorage.getItem(ONBOARDING_MATCH_SPOTLIGHT_V1)) return;
+    } catch {
+      return;
+    }
+    const id = window.requestAnimationFrame(() => setMatchSpotlightOpen(true));
+    return () => window.cancelAnimationFrame(id);
+  }, [result, isGenerating]);
+
   const handleAddProgram = (programId: string) => {
     persistAddedPrograms([...addedPrograms, programId]);
   };
@@ -220,6 +235,44 @@ export default function MatchPage() {
       return schoolA - schoolB;
     });
   }, [result, categoryFilter, selectedSchool]);
+
+  const matchSpotlightSteps = useMemo((): BubbleSpotlightStep[] => {
+    const steps: BubbleSpotlightStep[] = [
+      {
+        targetSelector: '[data-tour="match-category-filter"]',
+        title: "按分档筛选",
+        description: "在冲刺、主申、保底之间切换，对齐当前选校策略；筛选会同步影响右侧项目列表。",
+      },
+      {
+        targetSelector: '[data-tour="match-school-list"]',
+        title: "院校列表",
+        description: "点击学校可只看该校项目，也可与分档筛选组合，缩小浏览范围。",
+      },
+      {
+        targetSelector: '[data-tour="match-program-toolbar"]',
+        title: "匹配项目与批量勾选",
+        description: "在此浏览推荐项目。需要批量操作时，可用「全部勾选」将当前筛选下的项目一次性加入清单。",
+      },
+    ];
+    if (filteredPrograms.length > 0) {
+      steps.push({
+        targetSelector: '[data-tour="match-program-add"]',
+        title: "加入申请清单",
+        description: "在单张卡片上点击「+」加入工作台；已加入时同一位置可取消。加入后可在工作台管理文书与状态。",
+      });
+    }
+    steps.push({
+      targetSelector: '[data-tour="match-bottom-cta"]',
+      title: "进入工作台",
+      description:
+        addedPrograms.length > 0
+          ? "底部栏显示已选数量；点击箭头进入工作台，继续文书与申请进度。"
+          : "至少加入一个项目后，底部会出现固定操作栏，可一键进入工作台。",
+      allowMissingTarget: true,
+      padding: 8,
+    });
+    return steps;
+  }, [filteredPrograms.length, addedPrograms.length]);
 
   useEffect(() => {
     if (!selectedSchool) return;
@@ -382,7 +435,7 @@ export default function MatchPage() {
         )}
         <div className="grid gap-6 lg:grid-cols-[minmax(288px,320px)_1fr]">
           <aside className="space-y-4 lg:sticky lg:top-24 lg:h-fit">
-            <div className="rounded-xl border border-border/80 bg-card/95 p-2.5">
+            <div className="rounded-xl border border-border/80 bg-card/95 p-2.5" data-tour="match-category-filter">
               <p className="mb-2 px-2 text-xs font-semibold tracking-wide text-foreground/80">分档筛选</p>
               <div className="space-y-0.5">
                 {CATEGORY_ITEMS.map(({ id, label, index }) => {
@@ -427,7 +480,10 @@ export default function MatchPage() {
               </div>
             </div>
 
-            <div className="hide-scrollbar rounded-xl border border-border/80 bg-card/95 p-3.5 lg:max-h-[min(65vh,560px)] lg:overflow-y-auto">
+            <div
+              className="hide-scrollbar rounded-xl border border-border/80 bg-card/95 p-3.5 lg:max-h-[min(65vh,560px)] lg:overflow-y-auto"
+              data-tour="match-school-list"
+            >
               <p className="mb-3 px-1 text-xs font-semibold tracking-wide text-foreground/80">院校</p>
               <div className="space-y-2">
                 {filteredSchools.map((school) => {
@@ -450,7 +506,10 @@ export default function MatchPage() {
 
           <div className="min-h-[min(70vh,520px)] pr-1">
             <section className="overflow-hidden rounded-xl border border-border/80 bg-card/95">
-              <div className="flex flex-col gap-4 border-b border-border px-6 py-5 sm:flex-row sm:items-start sm:justify-between sm:px-8 sm:py-6">
+              <div
+                className="flex flex-col gap-4 border-b border-border px-6 py-5 sm:flex-row sm:items-start sm:justify-between sm:px-8 sm:py-6"
+                data-tour="match-program-toolbar"
+              >
                 <div className="min-w-0 space-y-1.5">
                   <div className="flex flex-wrap items-baseline gap-2 gap-y-1">
                     <h2 className="text-xl font-semibold tracking-tight text-foreground">匹配项目</h2>
@@ -504,6 +563,7 @@ export default function MatchPage() {
                       isAdded={addedPrograms.includes(program.id)}
                       onAdd={() => handleAddProgram(program.id)}
                       onRemove={() => handleRemoveProgram(program.id)}
+                      tourAddTarget={program.id === filteredPrograms[0]?.id}
                     />
                   );
                 })}
@@ -522,7 +582,10 @@ export default function MatchPage() {
       </main>
 
       {addedPrograms.length > 0 && (
-        <div className="sticky bottom-0 z-30 border-t border-border bg-background/85 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+        <div
+          className="sticky bottom-0 z-30 border-t border-border bg-background/85 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/70"
+          data-tour="match-bottom-cta"
+        >
           <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3">
             <p className="text-sm tabular-nums text-muted-foreground">
               已选 <span className="font-medium text-foreground">{addedPrograms.length}</span>
@@ -540,6 +603,14 @@ export default function MatchPage() {
           </div>
         </div>
       )}
+
+      <BubbleSpotlightTour
+        open={matchSpotlightOpen}
+        onOpenChange={setMatchSpotlightOpen}
+        steps={matchSpotlightSteps}
+        finishStorageKey={ONBOARDING_MATCH_SPOTLIGHT_V1}
+        zIndex={110}
+      />
     </div>
   );
 }
